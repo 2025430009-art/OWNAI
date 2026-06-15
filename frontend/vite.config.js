@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, '..'), '');
-  const backendPort = env.PORT || '3001';
+  const backendPort = env.PORT || '3000';
   const isGitHubPages = process.env.GITHUB_PAGES === 'true';
 
   return {

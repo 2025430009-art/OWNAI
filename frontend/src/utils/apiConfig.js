@@ -2,6 +2,7 @@ import { isOllamaAvailable } from './ollamaClient.js';
 
 const STORAGE_KEY = 'ownai_api_url';
 const BUILT_IN = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '') || '';
+export const DEFAULT_LOCAL_API_URL = 'http://localhost:3000';
 
 export const AI_MODES = {
   LOCAL: 'local',
@@ -15,6 +16,12 @@ export const MODE_LABELS = {
   [AI_MODES.STATIC]: 'Offline — prompt engine',
 };
 
+export const BACKEND_NOT_CONNECTED_MSG =
+  'Backend not connected. Chat works offline — connect a backend URL above, or run the server locally (cd backend && npm run start).';
+
+export const SIGNIN_REQUIRES_BACKEND_MSG =
+  'Sign-in requires the OWNAI backend. Connect a backend URL or run it locally: cd backend && npm run start';
+
 export function normalizeApiUrl(url) {
   const trimmed = url?.trim();
   if (!trimmed) return '';
@@ -27,13 +34,45 @@ export function normalizeApiUrl(url) {
   }
 }
 
+export function isLocalDev() {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
+/**
+ * Resolved backend origin.
+ * Priority: VITE_API_URL → localStorage → localhost default (dev only) → none (GitHub Pages).
+ */
 export function getApiBase() {
   if (BUILT_IN) return BUILT_IN;
   if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return normalizeApiUrl(stored);
+    const stored = normalizeApiUrl(localStorage.getItem(STORAGE_KEY));
+    if (stored) return stored;
   }
+  if (isLocalDev()) return DEFAULT_LOCAL_API_URL;
   return '';
+}
+
+export function hasBackendConfigured() {
+  return Boolean(getApiBase());
+}
+
+/** Build a full API URL or throw if no backend is configured (e.g. GitHub Pages). */
+export function apiUrl(path) {
+  const base = getApiBase();
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (!base) {
+    throw new Error(getBackendUnavailableMessage());
+  }
+  return `${base}${normalizedPath}`;
+}
+
+export function getBackendUnavailableMessage() {
+  if (isStaticHosting() && !getApiBase()) {
+    return BACKEND_NOT_CONNECTED_MSG;
+  }
+  return 'Backend not connected. Please run the backend server locally: cd backend && npm run start';
 }
 
 /** Alias used by architecture spec */
@@ -44,7 +83,7 @@ export function getBackendUrl() {
 export function setApiBase(url) {
   const normalized = normalizeApiUrl(url);
   if (!normalized) {
-    throw new Error('Enter a valid http or https URL (e.g. http://localhost:3001)');
+    throw new Error('Enter a valid http or https URL (e.g. http://localhost:3000)');
   }
   localStorage.setItem(STORAGE_KEY, normalized);
   return normalized;
@@ -54,29 +93,28 @@ export function clearApiBase() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export function isLocalDev() {
-  if (typeof window === 'undefined') return false;
-  const host = window.location.hostname;
-  return host === 'localhost' || host === '127.0.0.1';
-}
-
 export function isStaticHosting() {
-  if (getApiBase()) return false;
+  if (getApiBase() && getApiBase() !== DEFAULT_LOCAL_API_URL) return false;
+  if (BUILT_IN) return false;
   if (typeof window === 'undefined') return false;
+  if (typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY)) return false;
   return window.location.hostname.endsWith('github.io');
 }
 
 export function getApiStatusMessage() {
   if (!isStaticHosting()) return null;
-  return 'Running in offline mode. Connect a backend for full AI, or chat now with the built-in prompt engine.';
+  return 'Running on GitHub Pages (UI only). Chat works offline — connect a backend for sign-in and full AI.';
 }
 
 export function healthUrl(base = getApiBase()) {
-  return base ? `${base}/api/v1/health` : '/api/v1/health';
+  return base ? `${base}/api/v1/health` : '';
 }
 
 export async function probeBackend(baseUrl = getApiBase()) {
-  const url = baseUrl ? `${baseUrl}/api/v1/health` : '/api/v1/health';
+  if (!baseUrl) {
+    throw new Error(getBackendUnavailableMessage());
+  }
+  const url = `${baseUrl}/api/v1/health`;
   const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
   const text = await response.text();
   if (text.trimStart().startsWith('<')) {
@@ -90,8 +128,10 @@ export async function probeBackend(baseUrl = getApiBase()) {
 }
 
 export async function canReachBackend() {
+  const base = getApiBase();
+  if (!base) return false;
   try {
-    await probeBackend();
+    await probeBackend(base);
     return true;
   } catch {
     return false;
@@ -119,13 +159,13 @@ export function getModeLabel(mode) {
 export function friendlyAIError(error) {
   const msg = error?.message || '';
   if (/405|404|502|503|failed to fetch|network/i.test(msg)) {
-    return 'AI service is unavailable right now. Trying offline mode or check your connection.';
+    return getBackendUnavailableMessage();
   }
   if (/ollama/i.test(msg)) {
     return 'Ollama is not running. Start it with: ollama serve';
   }
-  if (/backend|health/i.test(msg)) {
-    return 'Backend is not reachable. Start it with: cd backend && npm run start';
+  if (/backend|health|not connected/i.test(msg)) {
+    return getBackendUnavailableMessage();
   }
   return msg.replace(/^Request failed: \d+\s*/i, '') || 'Something went wrong. Please try again.';
 }

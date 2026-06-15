@@ -1,10 +1,7 @@
 import fs from 'fs/promises';
-import { createRequire } from 'module';
 import mammoth from 'mammoth';
 import { config } from '../config/index.js';
-
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+import { parsePdfBuffer, PDF_ERROR_CORRUPT, PDF_ERROR_SCANNED } from '../utils/pdfParser.js';
 
 function truncate(text, max = config.uploadTextMaxChars) {
   if (!text) return '';
@@ -13,17 +10,15 @@ function truncate(text, max = config.uploadTextMaxChars) {
   return `${trimmed.slice(0, max)}\n\n[truncated]`;
 }
 
-async function extractPdfText(filePath) {
-  const buffer = await fs.readFile(filePath);
-  const data = await pdfParse(buffer);
-  const text = truncate(data.text || '');
-  if (!text) {
+async function extractPdfText(buffer) {
+  const result = await parsePdfBuffer(buffer);
+  if (!result.text) {
     return {
       textContent: null,
-      note: 'PDF uploaded but no readable text was found (it may be scanned/image-only).',
+      note: result.error || PDF_ERROR_SCANNED,
     };
   }
-  return { textContent: text, note: null };
+  return { textContent: truncate(result.text), note: null };
 }
 
 async function extractDocxText(filePath) {
@@ -36,14 +31,22 @@ async function extractDocxText(filePath) {
   return { textContent: text, note: null };
 }
 
-export async function extractDocumentText(filePath, mimetype, extension) {
+/**
+ * Extract text from a document file or buffer.
+ * @param {string} filePath - path on disk (for docx / fallback read)
+ * @param {string} mimetype
+ * @param {string} extension
+ * @param {Buffer} [buffer] - in-memory file buffer from multer memoryStorage()
+ */
+export async function extractDocumentText(filePath, mimetype, extension, buffer = null) {
   if (extension === '.pdf' || mimetype === 'application/pdf') {
     try {
-      return await extractPdfText(filePath);
+      const pdfBuffer = buffer ?? await fs.readFile(filePath);
+      return await extractPdfText(pdfBuffer);
     } catch (error) {
       return {
         textContent: null,
-        note: `PDF uploaded but text extraction failed: ${error.message}`,
+        note: error.message || PDF_ERROR_CORRUPT,
       };
     }
   }

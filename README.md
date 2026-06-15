@@ -36,18 +36,51 @@ See [plugins/README.md](./plugins/README.md) for full documentation.
 
 ## Quick Start
 
+### Local development
+
 ```bash
-cd "/home/system21/Downloads/OWN AI"
+cd "/path/to/OWN AI"
 cp .env.example .env
 npm install
 
-# Start API
-npm run dev
+# Terminal 1 — start the backend API (default http://localhost:3000)
+cd backend && npm run start
 
-# Start web UI (separate terminal)
-npm run dev:frontend
+# Terminal 2 — start the frontend (default http://localhost:5176)
+cd frontend && npm run dev
+```
 
-# CLI — list plugins & run commands
+Open **http://localhost:5176** in your browser.
+
+The frontend talks to the backend at `http://localhost:3000` by default. To use a different port, set `PORT` in `.env` and `VITE_API_URL` to match (e.g. `VITE_API_URL=http://localhost:3002`).
+
+### GitHub Pages (static UI only)
+
+The live demo at [GitHub Pages](https://2025430009-art.github.io/OWNAI/) hosts **only the frontend**. Chat works offline via the built-in prompt engine. Sign-in, attachments, and full AI inference require a backend.
+
+**Options on GitHub Pages:**
+1. **Chat offline** — works immediately, no setup needed
+2. **Connect a remote backend** — use the "Connect backend" panel and enter your API URL (e.g. a tunnel to your local server)
+3. **Bake in API URL at build time** — set the `VITE_API_URL` GitHub Actions secret to your deployed API origin
+
+### Configuring the backend URL
+
+| Method | When to use |
+|--------|-------------|
+| `VITE_API_URL` in `.env` | Local dev or CI build-time default |
+| `VITE_API_URL` GitHub secret | GitHub Pages deploy with a remote API |
+| Connect panel in the UI | Runtime override (saved in browser localStorage) |
+
+Example `.env`:
+
+```bash
+VITE_API_URL=http://localhost:3000
+PORT=3000
+```
+
+### CLI (optional)
+
+```bash
 npm run ownai:help
 npm run ownai -- inference:run "Hello OWNAI"
 npm run ownai -- rag-pipeline:query "What is RAG?"
@@ -70,7 +103,7 @@ npm run ownai -- model-ops:status
 - REST: `http://localhost:3000/api/v1`
 - OpenAI-compatible: `http://localhost:3000/v1`
 - Swagger: `http://localhost:3000/api-docs`
-- Web UI: `http://localhost:5173`
+- Web UI: `http://localhost:5176`
 
 ## Requirements
 

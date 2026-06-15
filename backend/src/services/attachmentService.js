@@ -1,12 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import { createRequire } from 'module';
 import mammoth from 'mammoth';
 import { config } from '../config/index.js';
-
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+import { parsePdfBuffer, PDF_ERROR_CORRUPT, PDF_ERROR_SCANNED } from '../utils/pdfParser.js';
 
 const METADATA_FILE = 'metadata.json';
 const TEXT_EXTENSIONS = new Set([
@@ -46,10 +43,12 @@ function truncateText(text) {
   return `${text.slice(0, max)}\n\n[truncated]`;
 }
 
-async function extractPdfText(filePath) {
-  const buffer = await fs.readFile(filePath);
-  const data = await pdfParse(buffer);
-  return truncateText(data.text?.trim() || '');
+async function extractPdfFromBuffer(buffer) {
+  const result = await parsePdfBuffer(buffer);
+  if (!result.text) {
+    return { textContent: null, note: result.error || PDF_ERROR_SCANNED };
+  }
+  return { textContent: truncateText(result.text), note: null };
 }
 
 async function extractDocxText(filePath) {
@@ -58,7 +57,7 @@ async function extractDocxText(filePath) {
   return truncateText(result.value?.trim() || '');
 }
 
-async function extractText(filePath, mimetype, extension) {
+async function extractText(filePath, mimetype, extension, fileBuffer = null) {
   try {
     if (TEXT_EXTENSIONS.has(extension)) {
       const raw = await fs.readFile(filePath, 'utf8');
@@ -66,11 +65,8 @@ async function extractText(filePath, mimetype, extension) {
     }
 
     if (extension === '.pdf' || mimetype === 'application/pdf') {
-      const textContent = await extractPdfText(filePath);
-      if (!textContent) {
-        return { textContent: null, note: 'PDF attached but no readable text was found.' };
-      }
-      return { textContent, note: null };
+      const buffer = fileBuffer ?? await fs.readFile(filePath);
+      return await extractPdfFromBuffer(buffer);
     }
 
     if (
@@ -92,7 +88,7 @@ async function extractText(filePath, mimetype, extension) {
   } catch (error) {
     return {
       textContent: null,
-      note: `File attached but could not be read: ${error.message}`,
+      note: error.message || PDF_ERROR_CORRUPT,
     };
   }
 }
@@ -105,6 +101,12 @@ export async function saveAttachment(file, { sessionId = null, userId = null } =
     throw error;
   }
 
+  if (!file.buffer?.length) {
+    const error = new Error('Upload failed: file buffer is missing. Ensure multer uses memoryStorage().');
+    error.status = 400;
+    throw error;
+  }
+
   await ensureUploadDir();
 
   const id = crypto.randomUUID();
@@ -112,7 +114,12 @@ export async function saveAttachment(file, { sessionId = null, userId = null } =
   const storedPath = path.join(config.uploadPath, storedName);
   await fs.writeFile(storedPath, file.buffer);
 
-  const { textContent, note } = await extractText(storedPath, file.mimetype, extension);
+  const { textContent, note } = await extractText(
+    storedPath,
+    file.mimetype,
+    extension,
+    file.buffer,
+  );
 
   const record = {
     id,
