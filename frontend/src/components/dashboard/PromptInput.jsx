@@ -20,6 +20,7 @@ export default function PromptInput({
   onAttach,
   onRemoveAttachment,
   uploading = false,
+  disabled = false,
 }) {
   const fileInputRef = useRef(null);
   const active = engines.find((e) => e.key === selectedEngine);
@@ -78,14 +79,14 @@ export default function PromptInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={3}
-          disabled={loading || uploading}
+          disabled={loading || uploading || disabled}
           className="w-full resize-none bg-transparent px-4 pt-4 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
         />
         <div className="flex items-center gap-2 px-3 pb-3">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={loading || uploading}
+            disabled={loading || uploading || disabled}
             className="rounded-lg p-2 text-slate-400 hover:bg-stone-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800"
             aria-label="Attach file"
           >
@@ -119,7 +120,7 @@ export default function PromptInput({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={loading || uploading || !canSend}
+            disabled={loading || uploading || disabled || !canSend}
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-600 text-white transition-colors hover:bg-teal-700 disabled:opacity-40"
             aria-label="Send message"
           >

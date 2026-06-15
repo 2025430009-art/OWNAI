@@ -5,7 +5,7 @@ import ChatPanel from '../components/dashboard/ChatPanel.jsx';
 import PromptInput from '../components/dashboard/PromptInput.jsx';
 import SectionPanel from '../components/dashboard/SectionPanel.jsx';
 import useChatSessions from '../hooks/useChatSessions.js';
-import { generateText, uploadAttachments, deleteAttachment, chatWithAttachments, listAIEngines } from '../api/client.js';
+import { generateText, uploadAttachments, deleteAttachment, chatWithAttachments, listAIEngines, getApiStatusMessage, isStaticHosting } from '../api/client.js';
 import { FALLBACK_ENGINES, resolveEngine } from '../utils/aiEngines.js';
 
 const DEFAULT_ENGINES = FALLBACK_ENGINES;
@@ -44,6 +44,8 @@ export default function DashboardPage({
   const [uploadError, setUploadError] = useState('');
   const chatEndRef = useRef(null);
   const saveToReferenceRef = useRef(null);
+  const staticNotice = getApiStatusMessage();
+  const chatDisabled = isStaticHosting();
 
   const userName = user?.email?.split('@')[0];
 
@@ -275,6 +277,11 @@ export default function DashboardPage({
                 showWelcome ? 'absolute bottom-0 left-0 right-0' : ''
               }`}
             >
+              {staticNotice && (
+                <div className="mx-auto mb-3 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  {staticNotice}
+                </div>
+              )}
               {uploadError && (
                 <p className="mx-auto mb-2 max-w-2xl text-sm text-red-500">{uploadError}</p>
               )}
@@ -283,6 +290,7 @@ export default function DashboardPage({
                 onChange={setInput}
                 onSubmit={() => sendMessage(input)}
                 loading={loading}
+                disabled={chatDisabled}
                 engines={engines}
                 selectedEngine={selectedEngine}
                 onEngineChange={setSelectedEngine}
@@ -297,6 +305,11 @@ export default function DashboardPage({
 
         {showSectionPrompt && (
           <div className="shrink-0 border-t border-stone-200 bg-[#f7f6f3]/90 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+            {staticNotice && (
+              <div className="mx-auto mb-3 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                {staticNotice}
+              </div>
+            )}
             {uploadError && (
               <p className="mx-auto mb-2 max-w-2xl text-sm text-red-500">{uploadError}</p>
             )}
@@ -305,6 +318,7 @@ export default function DashboardPage({
               onChange={setInput}
               onSubmit={() => sendMessage(input)}
               loading={loading}
+              disabled={chatDisabled}
               placeholder="Ask OWNAI anything…"
               engines={engines}
               selectedEngine={selectedEngine}
