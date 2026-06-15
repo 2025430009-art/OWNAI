@@ -19,7 +19,10 @@ const swaggerSpec = swaggerJsdoc({
       version: '1.0.0',
       description: 'REST API for QVAC-powered AI inference',
     },
-    servers: [{ url: `http://localhost:${config.port}`, description: 'Development' }],
+    servers: [
+      { url: '/', description: 'This server (uses the host and port you opened)' },
+      { url: `http://localhost:${config.port}`, description: `Localhost port ${config.port}` },
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -39,8 +42,30 @@ app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(apiRateLimiter);
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: 'OWN AI API Docs',
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+  },
+}));
 app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
+
+app.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    name: 'OWN AI Platform API',
+    version: '1.0.0',
+    status: 'running',
+    docs: '/api-docs',
+    health: '/api/v1/health',
+    endpoints: {
+      api: '/api/v1',
+      openai: '/v1',
+    },
+    hint: 'This is the API server. Open the React app at http://localhost:5173 (or your Vite dev port).',
+  });
+});
 
 app.use('/api/v1', apiRouter);
 app.use('/v1', openaiRouter);
