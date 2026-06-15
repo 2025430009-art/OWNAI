@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { CAPABILITIES, getCapability } from '../data/capabilities.js';
 import { capabilityService } from '../services/capabilityService.js';
-import { optionalAuth } from '../middleware/auth.js';
+import { inferenceAuth } from '../middleware/auth.js';
+import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -53,7 +54,7 @@ router.get('/:slug', (req, res) => {
  *     summary: Execute an AI capability
  *     tags: [Capabilities]
  */
-router.post('/:slug/execute', optionalAuth, async (req, res, next) => {
+router.post('/:slug/execute', inferenceAuth, inferenceRateLimiter, async (req, res, next) => {
   const capability = getCapability(req.params.slug);
   if (!capability) {
     return res.status(404).json({ error: 'Capability not found' });

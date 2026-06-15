@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../middleware/validate.js';
+import { inferenceAuth } from '../middleware/auth.js';
 import { createCodeEntrySchema, updateCodeEntrySchema } from '../middleware/codeLibraryValidate.js';
 import {
   createCodeEntry,
@@ -47,7 +48,7 @@ function parseFilters(query) {
  *     summary: Save a new code library entry
  *     tags: [Code Library]
  */
-router.post('/', validate(createCodeEntrySchema), handleLibrary(async (req) => {
+router.post('/', inferenceAuth, validate(createCodeEntrySchema), handleLibrary(async (req) => {
   const entry = await createCodeEntry(req.validated);
   return { entry };
 }));
@@ -111,7 +112,7 @@ router.get('/:id', handleLibrary(async (req) => {
  *     summary: Update code library entry
  *     tags: [Code Library]
  */
-router.put('/:id', validate(updateCodeEntrySchema), handleLibrary(async (req) => {
+router.put('/:id', inferenceAuth, validate(updateCodeEntrySchema), handleLibrary(async (req) => {
   const entry = await updateCodeEntry(req.params.id, req.validated);
   return { entry };
 }));
@@ -123,7 +124,7 @@ router.put('/:id', validate(updateCodeEntrySchema), handleLibrary(async (req) =>
  *     summary: Delete code library entry
  *     tags: [Code Library]
  */
-router.delete('/:id', handleLibrary(async (req) => {
+router.delete('/:id', inferenceAuth, handleLibrary(async (req) => {
   const result = await deleteCodeEntry(req.params.id);
   return result;
 }));

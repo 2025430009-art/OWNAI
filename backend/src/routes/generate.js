@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { validate, generateSchema } from '../middleware/validate.js';
-import { optionalAuth } from '../middleware/auth.js';
+import { inferenceAuth } from '../middleware/auth.js';
+import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
 import { modelManager } from '../services/modelManager.js';
 import { applyAlgorithm } from '../services/algorithmService.js';
 import { logUsage } from '../db/index.js';
@@ -8,7 +9,7 @@ import { logger } from '../utils/logger.js';
 
 const router = Router();
 
-router.post('/', optionalAuth, validate(generateSchema), async (req, res, next) => {
+router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), async (req, res, next) => {
   const {
     prompt,
     max_tokens,

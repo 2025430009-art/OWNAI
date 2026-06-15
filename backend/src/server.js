@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
-import { config } from './config/index.js';
+import { config, assertSecureConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -49,6 +49,13 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 async function start() {
+  try {
+    assertSecureConfig();
+  } catch (error) {
+    logger.error(error.message);
+    process.exit(1);
+  }
+
   try {
     await initDatabase();
     logger.info('Database ready');

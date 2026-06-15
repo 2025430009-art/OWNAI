@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test tests/mathSolver.test.js tests/aiResearchSolver.test.js tests/ownaiQa.test.js tests/codeLibrary.test.js",
+    "test": "node --test tests/mathSolver.test.js tests/aiResearchSolver.test.js tests/ownaiQa.test.js tests/codeLibrary.test.js tests/safeExpression.test.js",
     "build": "echo 'No build step required for backend'"
   },
   "dependencies": {

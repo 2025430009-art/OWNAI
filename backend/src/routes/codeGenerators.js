@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { optionalAuth } from '../middleware/auth.js';
+import { inferenceAuth } from '../middleware/auth.js';
+import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
 import { CODE_GENERATORS } from '../data/codeGenerators.js';
 import { generateCode } from '../services/codeGeneratorService.js';
@@ -45,7 +46,7 @@ router.get('/:id', (req, res) => {
   });
 });
 
-router.post('/:id/generate', optionalAuth, validate(codeGenerateSchema), async (req, res, next) => {
+router.post('/:id/generate', inferenceAuth, inferenceRateLimiter, validate(codeGenerateSchema), async (req, res, next) => {
   const { prompt, max_tokens, temperature, model_key, model_src, stream } = req.validated;
   const startTime = Date.now();
 

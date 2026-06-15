@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { modelManager } from '../services/modelManager.js';
-import { optionalAuth } from '../middleware/auth.js';
+import { inferenceAuth } from '../middleware/auth.js';
+import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
 import { logUsage } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -34,7 +35,7 @@ function extractPrompt(messages) {
  *     summary: OpenAI-compatible chat completions
  *     tags: [OpenAI Compatible]
  */
-router.post('/chat/completions', optionalAuth, async (req, res, next) => {
+router.post('/chat/completions', inferenceAuth, inferenceRateLimiter, async (req, res, next) => {
   const result = chatCompletionSchema.safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({

@@ -27,4 +27,32 @@ export const config = {
   uploadMaxFileSize: parseInt(process.env.UPLOAD_MAX_FILE_SIZE || String(10 * 1024 * 1024), 10),
   uploadMaxFiles: parseInt(process.env.UPLOAD_MAX_FILES || '5', 10),
   uploadTextMaxChars: parseInt(process.env.UPLOAD_TEXT_MAX_CHARS || '12000', 10),
+  security: {
+    requireAuth: process.env.REQUIRE_API_AUTH === 'true'
+      || (process.env.NODE_ENV === 'production' && process.env.REQUIRE_API_AUTH !== 'false'),
+    apiKey: process.env.API_KEY || null,
+  },
 };
+
+const INSECURE_JWT_SECRETS = new Set([
+  'dev-secret-change-in-production',
+  'change-me-in-production',
+  'change-me-to-a-long-random-secret',
+]);
+
+export function assertSecureConfig() {
+  if (config.nodeEnv !== 'production') return;
+
+  const secret = process.env.JWT_SECRET || config.jwt.secret;
+  if (!secret || INSECURE_JWT_SECRETS.has(secret)) {
+    throw new Error(
+      'JWT_SECRET must be set to a strong random value in production. Update your .env file.',
+    );
+  }
+
+  if (config.security.requireAuth && !config.security.apiKey) {
+    console.warn(
+      '[security] REQUIRE_API_AUTH is enabled but API_KEY is not set — only JWT auth will be accepted.',
+    );
+  }
+}

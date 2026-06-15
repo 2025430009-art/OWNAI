@@ -41,6 +41,7 @@ import {
 import {
   knapsack01, knapsackFractional, binPackingFFD, johnsonsRule, welshPowell, dsatur, hungarian,
 } from './aiResearch/combinatorial.js';
+import { buildSafeObjective } from '../utils/safeExpression.js';
 
 /** Registry of all supported algorithms by category */
 export const ALGORITHM_REGISTRY = {
@@ -83,26 +84,17 @@ export const ALGORITHM_REGISTRY = {
  * @param {number} dimensions
  */
 function buildObjective(expression, dimensions = 1) {
-  const expr = expression.replace(/\s+/g, '');
+  let evaluate;
+  try {
+    evaluate = buildSafeObjective(expression, dimensions);
+  } catch (error) {
+    throw new ResearchSolverError(error.message, error.code || 'EVAL_ERROR');
+  }
   return (point) => {
-    let evalExpr = expr;
-    for (let d = 0; d < point.length; d += 1) {
-      evalExpr = evalExpr.replace(new RegExp(`x${d}`, 'g'), `(${point[d]})`);
-    }
-    if (dimensions === 1) evalExpr = evalExpr.replace(/x/g, `(${point[0]})`);
-    evalExpr = evalExpr
-      .replace(/sin/g, 'Math.sin')
-      .replace(/cos/g, 'Math.cos')
-      .replace(/exp/g, 'Math.exp')
-      .replace(/ln/g, 'Math.log')
-      .replace(/\^/g, '**');
     try {
-      // eslint-disable-next-line no-new-func
-      const val = Function(`"use strict"; return (${evalExpr});`)();
-      if (!Number.isFinite(val)) throw new ResearchSolverError('Objective returned non-finite value', 'EVAL_ERROR');
-      return val;
-    } catch (e) {
-      throw new ResearchSolverError(`Invalid objective expression: ${e.message}`, 'EVAL_ERROR');
+      return evaluate(point);
+    } catch (error) {
+      throw new ResearchSolverError(error.message, error.code || 'EVAL_ERROR');
     }
   };
 }
@@ -324,12 +316,7 @@ export function inferStatistics(params) {
   if (algorithm === 'ab_test') return abTest(options);
   if (algorithm === 'metropolis_hastings') {
     if (options.logPosteriorExpression) {
-      const expr = options.logPosteriorExpression;
-      const logPosterior = (point) => {
-        let e = expr.replace(/x0/g, `(${point[0]})`).replace(/x/g, `(${point[0]})`).replace(/\^/g, '**');
-        // eslint-disable-next-line no-new-func
-        return Function(`"use strict"; return (${e});`)();
-      };
+      const logPosterior = buildSafeObjective(options.logPosteriorExpression, (options.initial || [0]).length);
       return metropolisHastings({ logPosterior, initial: options.initial, ...options });
     }
     throw new ResearchSolverError('logPosteriorExpression required for metropolis_hastings', 'INVALID_INPUT');

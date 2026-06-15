@@ -142,10 +142,15 @@ export async function getAttachment(id) {
   return items.find((item) => item.id === id) ?? null;
 }
 
-export async function listAttachments({ sessionId } = {}) {
+export async function listAttachments({ sessionId, userId } = {}) {
   const items = await readMetadata();
-  if (!sessionId) return items;
-  return items.filter((item) => item.sessionId === sessionId);
+  if (userId) {
+    return items.filter((item) => item.userId === userId);
+  }
+  if (sessionId) {
+    return items.filter((item) => item.sessionId === sessionId);
+  }
+  return [];
 }
 
 export async function deleteAttachment(id) {

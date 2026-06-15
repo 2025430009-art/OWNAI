@@ -2,7 +2,13 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
-import { optionalAuth } from '../middleware/auth.js';
+import { inferenceAuth } from '../middleware/auth.js';
+import {
+  assertAttachmentAccess,
+  getRequestSessionId,
+  requireSessionOrAuth,
+} from '../middleware/attachmentAccess.js';
+import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
 import { config } from '../config/index.js';
 import {
   saveAttachment,
@@ -25,34 +31,42 @@ const upload = multer({
   },
 });
 
-router.get('/', optionalAuth, async (req, res, next) => {
+router.get('/', inferenceAuth, requireSessionOrAuth, async (req, res, next) => {
   try {
-    const sessionId = req.query.session_id?.toString();
-    const items = await listAttachments({ sessionId });
+    const sessionId = getRequestSessionId(req);
+    const items = await listAttachments({
+      sessionId,
+      userId: req.user?.id ?? null,
+    });
     res.json({ success: true, attachments: items });
   } catch (error) {
     next(error);
   }
 });
 
-router.get('/:id', optionalAuth, async (req, res, next) => {
+router.get('/:id', inferenceAuth, async (req, res, next) => {
   try {
     const attachment = await getAttachment(req.params.id);
     if (!attachment) {
       return res.status(404).json({ error: 'Attachment not found' });
     }
+    assertAttachmentAccess(attachment, req);
     res.json({ success: true, attachment });
   } catch (error) {
+    if (error.status === 403) {
+      return res.status(403).json({ error: error.message });
+    }
     next(error);
   }
 });
 
-router.get('/:id/file', optionalAuth, async (req, res, next) => {
+router.get('/:id/file', inferenceAuth, async (req, res, next) => {
   try {
     const attachment = await getAttachment(req.params.id);
     if (!attachment) {
       return res.status(404).json({ error: 'Attachment not found' });
     }
+    assertAttachmentAccess(attachment, req);
 
     const filePath = path.resolve(config.uploadPath, attachment.storedName);
     await fs.access(filePath);
@@ -60,18 +74,21 @@ router.get('/:id/file', optionalAuth, async (req, res, next) => {
     res.setHeader('Content-Disposition', `inline; filename="${attachment.originalName}"`);
     return res.sendFile(filePath);
   } catch (error) {
+    if (error.status === 403) {
+      return res.status(403).json({ error: error.message });
+    }
     next(error);
   }
 });
 
-router.post('/', optionalAuth, upload.array('files', config.uploadMaxFiles), async (req, res, next) => {
+router.post('/', inferenceAuth, upload.array('files', config.uploadMaxFiles), async (req, res, next) => {
   try {
     const files = req.files || [];
     if (!files.length) {
       return res.status(400).json({ error: 'No files uploaded. Use field name "files".' });
     }
 
-    const sessionId = req.body.session_id?.toString() || null;
+    const sessionId = getRequestSessionId(req);
     const saved = [];
 
     for (const file of files) {
@@ -91,19 +108,24 @@ router.post('/', optionalAuth, upload.array('files', config.uploadMaxFiles), asy
   }
 });
 
-router.delete('/:id', optionalAuth, async (req, res, next) => {
+router.delete('/:id', inferenceAuth, async (req, res, next) => {
   try {
-    const removed = await deleteAttachment(req.params.id);
-    if (!removed) {
+    const attachment = await getAttachment(req.params.id);
+    if (!attachment) {
       return res.status(404).json({ error: 'Attachment not found' });
     }
+    assertAttachmentAccess(attachment, req);
+    await deleteAttachment(req.params.id);
     res.json({ success: true });
   } catch (error) {
+    if (error.status === 403) {
+      return res.status(403).json({ error: error.message });
+    }
     next(error);
   }
 });
 
-router.post('/chat', optionalAuth, upload.array('files', config.uploadMaxFiles), async (req, res, next) => {
+router.post('/chat', inferenceAuth, inferenceRateLimiter, upload.array('files', config.uploadMaxFiles), async (req, res, next) => {
   const startTime = Date.now();
 
   try {
@@ -112,7 +134,7 @@ router.post('/chat', optionalAuth, upload.array('files', config.uploadMaxFiles),
       return res.status(400).json({ error: 'prompt is required' });
     }
 
-    const sessionId = req.body.session_id?.toString() || null;
+    const sessionId = getRequestSessionId(req);
     const files = req.files || [];
     const attachmentIds = req.body.attachment_ids
       ? JSON.parse(req.body.attachment_ids)
@@ -129,7 +151,9 @@ router.post('/chat', optionalAuth, upload.array('files', config.uploadMaxFiles),
     const existing = [];
     for (const id of attachmentIds) {
       const item = await getAttachment(id);
-      if (item) existing.push(item);
+      if (!item) continue;
+      assertAttachmentAccess(item, req);
+      existing.push(item);
     }
 
     const allAttachments = [...existing, ...uploaded];
@@ -188,6 +212,9 @@ router.post('/chat', optionalAuth, upload.array('files', config.uploadMaxFiles),
       },
     });
   } catch (error) {
+    if (error.status === 403) {
+      return res.status(403).json({ error: error.message });
+    }
     logger.warn('Attachment chat failed', { error: error.message });
     next(error);
   }

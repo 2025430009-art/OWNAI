@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../middleware/validate.js';
+import { inferenceAuth } from '../middleware/auth.js';
 import { createQaSchema } from '../middleware/ownaiQaValidate.js';
 import {
   createQaEntry,
@@ -35,7 +36,7 @@ function handleQa(handler) {
  *     summary: Save a new OWN AI Q&A pair
  *     tags: [OWN AI Reference]
  */
-router.post('/', validate(createQaSchema), handleQa(async (req) => {
+router.post('/', inferenceAuth, validate(createQaSchema), handleQa(async (req) => {
   const entry = await createQaEntry(req.validated);
   return { entry };
 }));
@@ -76,7 +77,7 @@ router.get('/search', handleQa(async (req) => {
  *     summary: Delete a saved Q&A pair
  *     tags: [OWN AI Reference]
  */
-router.delete('/:id', handleQa(async (req) => {
+router.delete('/:id', inferenceAuth, handleQa(async (req) => {
   const result = await deleteQaEntry(req.params.id);
   return result;
 }));

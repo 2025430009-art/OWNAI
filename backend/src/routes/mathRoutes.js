@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { validate } from '../middleware/validate.js';
+import { inferenceAuth } from '../middleware/auth.js';
+import { computeRateLimiter } from '../middleware/rateLimiter.js';
 import {
   quadraticSchema,
   linearSystemSchema,
@@ -19,6 +21,8 @@ import {
 } from '../services/mathSolver.js';
 
 const router = Router();
+
+router.use(inferenceAuth, computeRateLimiter);
 
 function handleMath(handler) {
   return (req, res, next) => {

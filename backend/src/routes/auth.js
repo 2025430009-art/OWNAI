@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { validate, signupSchema, loginSchema } from '../middleware/validate.js';
 import { authMiddleware, signToken } from '../middleware/auth.js';
+import { authRateLimiter } from '../middleware/rateLimiter.js';
 import { findUserByEmail, createUser, getUserUsageStats } from '../db/index.js';
 
 const router = Router();
@@ -28,7 +29,7 @@ const router = Router();
  *       201:
  *         description: User created
  */
-router.post('/signup', validate(signupSchema), async (req, res, next) => {
+router.post('/signup', authRateLimiter, validate(signupSchema), async (req, res, next) => {
   try {
     const { email, password } = req.validated;
     const existing = await findUserByEmail(email);
@@ -57,7 +58,7 @@ router.post('/signup', validate(signupSchema), async (req, res, next) => {
  *     summary: Login
  *     tags: [Auth]
  */
-router.post('/login', validate(loginSchema), async (req, res, next) => {
+router.post('/login', authRateLimiter, validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.validated;
     const user = await findUserByEmail(email);

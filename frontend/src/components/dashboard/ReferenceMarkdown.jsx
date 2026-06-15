@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { sanitizeUrl } from '../../utils/sanitizeUrl.js';
 
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
@@ -56,11 +57,16 @@ function parseInline(text, keyPrefix = 'i') {
         </code>,
       );
     } else if (m[5]) {
-      parts.push(
-        <a key={key} href={m[6]} className="text-teal-600 underline hover:text-teal-700" target="_blank" rel="noreferrer">
-          {m[5]}
-        </a>,
-      );
+      const href = sanitizeUrl(m[6]);
+      if (href) {
+        parts.push(
+          <a key={key} href={href} className="text-teal-600 underline hover:text-teal-700" target="_blank" rel="noopener noreferrer">
+            {m[5]}
+          </a>,
+        );
+      } else {
+        parts.push(m[5]);
+      }
     }
     last = pattern.lastIndex;
   }
