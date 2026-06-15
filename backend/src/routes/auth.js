@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { validate, signupSchema, loginSchema } from '../middleware/validate.js';
 import { authMiddleware, signToken } from '../middleware/auth.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
-import { findUserByEmail, createUser, getUserUsageStats } from '../db/index.js';
+import { findUserByEmail, createUser, getUserUsageStats, isDatabaseAvailable } from '../db/index.js';
 
 const router = Router();
 
@@ -31,6 +31,12 @@ const router = Router();
  */
 router.post('/signup', authRateLimiter, validate(signupSchema), async (req, res, next) => {
   try {
+    if (!isDatabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Sign-up requires PostgreSQL. Start the database or use chat without an account.',
+        code: 'DB_UNAVAILABLE',
+      });
+    }
     const { email, password } = req.validated;
     const existing = await findUserByEmail(email);
     if (existing) {
@@ -47,6 +53,9 @@ router.post('/signup', authRateLimiter, validate(signupSchema), async (req, res,
       user: { id: user.id, email: user.email },
     });
   } catch (error) {
+    if (error.code === 'DB_UNAVAILABLE') {
+      return res.status(503).json({ error: 'Database unavailable. Auth is disabled.', code: 'DB_UNAVAILABLE' });
+    }
     next(error);
   }
 });
@@ -60,6 +69,12 @@ router.post('/signup', authRateLimiter, validate(signupSchema), async (req, res,
  */
 router.post('/login', authRateLimiter, validate(loginSchema), async (req, res, next) => {
   try {
+    if (!isDatabaseAvailable()) {
+      return res.status(503).json({
+        error: 'Sign-in requires PostgreSQL. Chat and AI work without an account.',
+        code: 'DB_UNAVAILABLE',
+      });
+    }
     const { email, password } = req.validated;
     const user = await findUserByEmail(email);
     if (!user) {
@@ -78,6 +93,9 @@ router.post('/login', authRateLimiter, validate(loginSchema), async (req, res, n
       user: { id: user.id, email: user.email },
     });
   } catch (error) {
+    if (error.code === 'DB_UNAVAILABLE') {
+      return res.status(503).json({ error: 'Database unavailable. Auth is disabled.', code: 'DB_UNAVAILABLE' });
+    }
     next(error);
   }
 });

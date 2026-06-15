@@ -10,6 +10,7 @@ import mathRouter from './mathRoutes.js';
 import aiResearchRouter from './aiResearchRoutes.js';
 import ownaiQaRouter from './ownaiQa.js';
 import codeLibraryRouter from './codeLibrary.js';
+import ragRouter from './rag.js';
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use('/math', mathRouter);
 router.use('/ai', aiResearchRouter);
 router.use('/ownai-qa', ownaiQaRouter);
 router.use('/code-library', codeLibraryRouter);
+router.use('/rag', ragRouter);
 
 export default router;

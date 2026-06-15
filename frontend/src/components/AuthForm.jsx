@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { login, signup, getApiStatusMessage, isStaticHosting } from '../api/client.js';
+import { login, signup } from '../api/client.js';
+import BackendConnectPanel from './dashboard/BackendConnectPanel.jsx';
 
 export default function AuthForm({ onAuth }) {
   const [mode, setMode] = useState('login');
@@ -7,8 +8,6 @@ export default function AuthForm({ onAuth }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const staticNotice = getApiStatusMessage();
-  const authDisabled = isStaticHosting();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,13 +35,9 @@ export default function AuthForm({ onAuth }) {
         {mode === 'login' ? 'Access usage tracking and saved sessions' : 'Register for the OWN AI platform'}
       </p>
 
-      {staticNotice && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          {staticNotice}
-        </div>
-      )}
+      <BackendConnectPanel compact />
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 mt-4">
         <div>
           <label className="block text-xs text-slate-400 mb-1.5">Email</label>
           <input
@@ -67,7 +62,7 @@ export default function AuthForm({ onAuth }) {
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
-        <button type="submit" disabled={loading || authDisabled} className="btn-primary w-full">
+        <button type="submit" disabled={loading} className="btn-primary w-full">
           {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Sign Up'}
         </button>
       </form>

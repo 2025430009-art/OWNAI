@@ -14,7 +14,8 @@ export default defineConfig(({ mode }) => {
     base: isGitHubPages ? '/OWNAI/' : '/',
     plugins: [react()],
     server: {
-      port: 5173,
+      port: 5176,
+      strictPort: false,
       proxy: {
         '/api': {
           target: `http://localhost:${backendPort}`,

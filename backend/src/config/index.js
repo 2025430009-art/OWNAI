@@ -22,7 +22,10 @@ export const config = {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
     max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
   },
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174,https://2025430009-art.github.io')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   uploadPath: process.env.UPLOAD_PATH || path.resolve(__dirname, '../../../uploads/attachments'),
   uploadMaxFileSize: parseInt(process.env.UPLOAD_MAX_FILE_SIZE || String(10 * 1024 * 1024), 10),
   uploadMaxFiles: parseInt(process.env.UPLOAD_MAX_FILES || '5', 10),

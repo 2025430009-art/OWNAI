@@ -10,6 +10,7 @@ import apiRouter from './routes/index.js';
 import openaiRouter from './routes/openai.js';
 import { initDatabase } from './db/index.js';
 import { modelManager } from './services/modelManager.js';
+import { resolveListenPort } from '../scripts/ensure-port.js';
 
 const swaggerSpec = swaggerJsdoc({
   definition: {
@@ -38,7 +39,16 @@ const swaggerSpec = swaggerJsdoc({
 
 const app = express();
 
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || config.corsOrigin.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(apiRateLimiter);
 
@@ -88,10 +98,15 @@ async function start() {
     logger.warn('Database unavailable — auth/usage features disabled', { error: error.message });
   }
 
-  const server = app.listen(config.port, () => {
-    logger.info(`OWN AI API running on http://localhost:${config.port}`);
-    logger.info(`Swagger docs at http://localhost:${config.port}/api-docs`);
-    logger.info(`OpenAI-compatible API at http://localhost:${config.port}/v1`);
+  const listenPort = await resolveListenPort(config.port);
+
+  const server = app.listen(listenPort, () => {
+    logger.info(`OWN AI API running on http://localhost:${listenPort}`);
+    logger.info(`Swagger docs at http://localhost:${listenPort}/api-docs`);
+    logger.info(`OpenAI-compatible API at http://localhost:${listenPort}/v1`);
+    if (listenPort !== config.port) {
+      logger.warn(`Port ${config.port} was busy — using ${listenPort} instead`);
+    }
   });
 
   const shutdown = async (signal) => {

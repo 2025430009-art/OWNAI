@@ -1,7 +1,9 @@
-# Build React frontend and deploy to GitHub Pages (project site: /OWNAI/)
-name: Deploy OWNAI frontend to Pages
+# OWNAI v2 — auto-deploy frontend to GitHub Pages on every push to main
+name: Deploy OWNAI
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -10,7 +12,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: ownai-pages
   cancel-in-progress: false
 
 jobs:
@@ -24,11 +26,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build frontend for GitHub Pages
+      - name: Build frontend
         env:
           GITHUB_PAGES: 'true'
           VITE_API_URL: ${{ secrets.VITE_API_URL }}

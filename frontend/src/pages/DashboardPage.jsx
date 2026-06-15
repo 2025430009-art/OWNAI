@@ -5,7 +5,10 @@ import ChatPanel from '../components/dashboard/ChatPanel.jsx';
 import PromptInput from '../components/dashboard/PromptInput.jsx';
 import SectionPanel from '../components/dashboard/SectionPanel.jsx';
 import useChatSessions from '../hooks/useChatSessions.js';
-import { generateText, uploadAttachments, deleteAttachment, chatWithAttachments, listAIEngines, getApiStatusMessage, isStaticHosting } from '../api/client.js';
+import { uploadAttachments, deleteAttachment, listAIEngines, ingestRagDocument } from '../api/client.js';
+import useAI from '../hooks/useAI.js';
+import BackendConnectPanel from '../components/dashboard/BackendConnectPanel.jsx';
+import { getSessionContext } from '../utils/memory.js';
 import { FALLBACK_ENGINES, resolveEngine } from '../utils/aiEngines.js';
 
 const DEFAULT_ENGINES = FALLBACK_ENGINES;
@@ -44,8 +47,7 @@ export default function DashboardPage({
   const [uploadError, setUploadError] = useState('');
   const chatEndRef = useRef(null);
   const saveToReferenceRef = useRef(null);
-  const staticNotice = getApiStatusMessage();
-  const chatDisabled = isStaticHosting();
+  const { send: sendAI, friendlyAIError, modeLabel, taskMode, activeModel, memoryFacts, clearMemory } = useAI();
 
   const userName = user?.email?.split('@')[0];
 
@@ -82,6 +84,7 @@ export default function DashboardPage({
     setLoading(true);
 
     const userLabel = trimmed || `Sent ${attachments.length} attachment(s)`;
+    const history = getSessionContext(activeSession?.messages ?? []);
     appendMessage(sessionId, { role: 'user', content: userLabel });
     appendMessage(sessionId, { role: 'assistant', content: '', streaming: true });
 
@@ -90,60 +93,32 @@ export default function DashboardPage({
     const { model_key, algorithm_id } = resolveEngine(selectedEngine, engines);
 
     try {
-      const response = attachmentIds.length
-        ? await chatWithAttachments({
-            prompt: promptText,
-            attachmentIds,
-            sessionId,
-            max_tokens: 512,
-            temperature,
-            model_key,
-            algorithm_id,
-            stream: true,
-          })
-        : await generateText({
-            prompt: promptText,
-            max_tokens: 512,
-            temperature,
-            model_key,
-            algorithm_id,
-            stream: true,
-          });
+      const result = await sendAI({
+        prompt: promptText,
+        history,
+        temperature,
+        max_tokens: 512,
+        model_key,
+        algorithm_id,
+        attachmentIds,
+        sessionId,
+        onToken: (full) => {
+          updateLastMessage(sessionId, full, true);
+        },
+      });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') continue;
-          try {
-            const parsed = JSON.parse(data);
-            accumulated += parsed.token || '';
-            updateLastMessage(sessionId, accumulated, true);
-          } catch {
-            // skip malformed chunks
-          }
-        }
-      }
-
-      replaceLastAssistant(sessionId, accumulated || 'No response received.');
+      const content = result?.content ?? (typeof result === 'string' ? result : '');
+      replaceLastAssistant(sessionId, content || 'No response received.');
       setAttachments([]);
 
-      if (saveToReferenceRef.current && accumulated.trim()) {
-        saveToReferenceRef.current(userLabel, accumulated, 'Chat');
+      if (saveToReferenceRef.current && content.trim()) {
+        saveToReferenceRef.current(userLabel, content, 'Chat');
       }
     } catch (error) {
       removeStreamingPlaceholder(sessionId);
       appendMessage(sessionId, {
         role: 'assistant',
-        content: `Sorry, something went wrong: ${error.message}`,
+        content: `Sorry, something went wrong: ${friendlyAIError(error)}`,
       });
     } finally {
       setLoading(false);
@@ -159,6 +134,9 @@ export default function DashboardPage({
     temperature,
     selectedEngine,
     engines,
+    sendAI,
+    friendlyAIError,
+    activeSession,
   ]);
 
   const handleAttach = async (files) => {
@@ -168,6 +146,13 @@ export default function DashboardPage({
       const sessionId = activeId || undefined;
       const data = await uploadAttachments(files, sessionId);
       setAttachments((prev) => [...prev, ...(data.attachments || [])]);
+      for (const file of files) {
+        try {
+          await ingestRagDocument(file);
+        } catch {
+          // RAG ingest optional when backend unavailable
+        }
+      }
     } catch (error) {
       setUploadError(error.message);
     } finally {
@@ -277,11 +262,36 @@ export default function DashboardPage({
                 showWelcome ? 'absolute bottom-0 left-0 right-0' : ''
               }`}
             >
-              {staticNotice && (
-                <div className="mx-auto mb-3 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                  {staticNotice}
-                </div>
-              )}
+              <BackendConnectPanel />
+              <div className="mx-auto mb-2 flex max-w-2xl flex-wrap gap-2 px-1">
+                {modeLabel && (
+                  <span className="rounded-full border border-stone-200 bg-white px-2.5 py-0.5 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+                    {modeLabel}
+                  </span>
+                )}
+                {taskMode && (
+                  <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-[11px] text-teal-800 dark:border-teal-800 dark:bg-teal-950/40">
+                    {taskMode}
+                  </span>
+                )}
+                {activeModel && (
+                  <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800">
+                    {activeModel}
+                  </span>
+                )}
+                {(memoryFacts.name || memoryFacts.role) && (
+                  <span className="truncate rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30">
+                    Remembers: {[memoryFacts.name, memoryFacts.role].filter(Boolean).join(' · ')}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={clearMemory}
+                  className="rounded-full border border-red-200 px-2.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50 dark:border-red-900"
+                >
+                  Clear memory
+                </button>
+              </div>
               {uploadError && (
                 <p className="mx-auto mb-2 max-w-2xl text-sm text-red-500">{uploadError}</p>
               )}
@@ -290,7 +300,7 @@ export default function DashboardPage({
                 onChange={setInput}
                 onSubmit={() => sendMessage(input)}
                 loading={loading}
-                disabled={chatDisabled}
+                disabled={loading}
                 engines={engines}
                 selectedEngine={selectedEngine}
                 onEngineChange={setSelectedEngine}
@@ -298,6 +308,7 @@ export default function DashboardPage({
                 onAttach={handleAttach}
                 onRemoveAttachment={handleRemoveAttachment}
                 uploading={uploading}
+                onVoiceTranscript={(text) => setInput((prev) => (prev ? `${prev} ${text}` : text))}
               />
             </div>
           </>
@@ -305,11 +316,7 @@ export default function DashboardPage({
 
         {showSectionPrompt && (
           <div className="shrink-0 border-t border-stone-200 bg-[#f7f6f3]/90 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-            {staticNotice && (
-              <div className="mx-auto mb-3 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                {staticNotice}
-              </div>
-            )}
+            <BackendConnectPanel />
             {uploadError && (
               <p className="mx-auto mb-2 max-w-2xl text-sm text-red-500">{uploadError}</p>
             )}
@@ -318,7 +325,6 @@ export default function DashboardPage({
               onChange={setInput}
               onSubmit={() => sendMessage(input)}
               loading={loading}
-              disabled={chatDisabled}
               placeholder="Ask OWNAI anything…"
               engines={engines}
               selectedEngine={selectedEngine}
@@ -327,6 +333,7 @@ export default function DashboardPage({
               onAttach={handleAttach}
               onRemoveAttachment={handleRemoveAttachment}
               uploading={uploading}
+              onVoiceTranscript={(text) => setInput((prev) => (prev ? `${prev} ${text}` : text))}
             />
           </div>
         )}

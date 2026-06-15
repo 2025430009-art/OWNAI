@@ -74,11 +74,14 @@ class ModelManager {
       max_tokens = 100,
       temperature = 0.7,
       stream = false,
+      history: conversationHistory,
     } = options;
 
     return this.enqueue(async () => {
       const modelId = await this.ensureLoaded(modelKey, modelSrc);
-      const history = [{ role: 'user', content: prompt }];
+      const history = conversationHistory?.length
+        ? conversationHistory
+        : [{ role: 'user', content: prompt }];
 
       const run = completion({
         modelId,
@@ -107,10 +110,13 @@ class ModelManager {
       modelSrc = config.defaultModelSrc,
       max_tokens = 100,
       temperature = 0.7,
+      history: conversationHistory,
     } = options;
 
     const modelId = await this.ensureLoaded(modelKey, modelSrc);
-    const history = [{ role: 'user', content: prompt }];
+    const history = conversationHistory?.length
+      ? conversationHistory
+      : [{ role: 'user', content: prompt }];
 
     return completion({
       modelId,

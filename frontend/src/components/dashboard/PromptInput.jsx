@@ -1,5 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { AttachIcon, MicIcon, SendIcon } from './DashboardIcons.jsx';
+import { VoiceInput, isVoiceSupported } from '../../utils/voice.js';
 
 const ACCEPTED_TYPES = [
   '.txt', '.md', '.json', '.csv', '.js', '.jsx', '.ts', '.tsx',
@@ -21,9 +22,31 @@ export default function PromptInput({
   onRemoveAttachment,
   uploading = false,
   disabled = false,
+  onVoiceTranscript,
 }) {
   const fileInputRef = useRef(null);
+  const [listening, setListening] = useState(false);
+  const voiceRef = useRef(null);
   const active = engines.find((e) => e.key === selectedEngine);
+
+  const toggleVoice = useCallback(() => {
+    if (!isVoiceSupported()) return;
+    if (!voiceRef.current) {
+      voiceRef.current = new VoiceInput(
+        (text) => {
+          setListening(false);
+          onVoiceTranscript?.(text);
+        },
+        () => setListening(false),
+      );
+    }
+    if (listening) {
+      voiceRef.current.stop();
+      setListening(false);
+    } else {
+      setListening(voiceRef.current.start());
+    }
+  }, [listening, onVoiceTranscript]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -112,8 +135,15 @@ export default function PromptInput({
           )}
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-400 hover:bg-stone-100 hover:text-slate-600 dark:hover:bg-slate-800"
+            onClick={toggleVoice}
+            disabled={loading || uploading || disabled || !isVoiceSupported()}
+            className={`rounded-lg p-2 transition-colors ${
+              listening
+                ? 'bg-red-100 text-red-600 animate-pulse'
+                : 'text-slate-400 hover:bg-stone-100 hover:text-slate-600 dark:hover:bg-slate-800'
+            }`}
             aria-label="Voice input"
+            title={isVoiceSupported() ? 'Voice input' : 'Voice not supported'}
           >
             <MicIcon />
           </button>
