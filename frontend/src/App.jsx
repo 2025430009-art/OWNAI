@@ -13,6 +13,7 @@ import ApiPage from './pages/ApiPage.jsx';
 import ExamplesPage from './pages/ExamplesPage.jsx';
 import CommunityPage from './pages/CommunityPage.jsx';
 import ReleaseHighlightsPage from './pages/ReleaseHighlightsPage.jsx';
+import DashboardPage from './pages/DashboardPage.jsx';
 import { healthCheck, listModels, getMe, listCapabilities } from './api/client.js';
 
 export default function App() {
@@ -65,19 +66,23 @@ export default function App() {
     setActiveCapability(full);
   };
 
+  const isDashboard = tab === 'dashboard';
+
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-slate-950">
-      <Header
-        activeTab={tab}
-        onNavigate={navigate}
-        user={user}
-        onLogout={handleLogout}
-        apiStatus={apiStatus}
-        theme={theme}
-        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-      />
+      {!isDashboard && (
+        <Header
+          activeTab={tab}
+          onNavigate={navigate}
+          user={user}
+          onLogout={handleLogout}
+          apiStatus={apiStatus}
+          theme={theme}
+          onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        />
+      )}
 
-      <main className="flex-1">
+      <main className={isDashboard ? 'flex-1' : 'flex-1'}>
         {tab === 'home' && (
           <HomePage onNavigate={navigate} onTryCapability={tryCapability} />
         )}
@@ -96,6 +101,15 @@ export default function App() {
           </div>
         )}
         {tab === 'architecture' && <ArchitectureOverview />}
+        {tab === 'dashboard' && (
+          <DashboardPage
+            models={models}
+            user={user}
+            onSignIn={() => navigate('account')}
+            theme={theme}
+            onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          />
+        )}
         {tab === 'playground' && <ChatInterface models={models} />}
         {tab === 'account' && (
           <div className="mx-auto max-w-md px-4 py-12">
@@ -118,7 +132,7 @@ export default function App() {
         />
       )}
 
-      <Footer onNavigate={navigate} />
+      {!isDashboard && <Footer onNavigate={navigate} />}
     </div>
   );
 }

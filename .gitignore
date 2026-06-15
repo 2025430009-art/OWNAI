@@ -9,6 +9,8 @@ build/
 *.log
 logs/*.log
 !logs/.gitkeep
+uploads/*
+!uploads/.gitkeep
 models/*.gguf
 !models/.gitkeep
 .DS_Store

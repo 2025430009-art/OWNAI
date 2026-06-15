@@ -1,53 +1,28 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import { validate, generateSchema } from '../middleware/validate.js';
 import { optionalAuth } from '../middleware/auth.js';
 import { modelManager } from '../services/modelManager.js';
+import { applyAlgorithm } from '../services/algorithmService.js';
 import { logUsage } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
 
-/**
- * @openapi
- * /api/v1/generate:
- *   post:
- *     summary: Generate text completion
- *     tags: [Inference]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [prompt]
- *             properties:
- *               prompt:
- *                 type: string
- *               max_tokens:
- *                 type: integer
- *                 default: 100
- *               temperature:
- *                 type: number
- *                 default: 0.7
- *               model_key:
- *                 type: string
- *               model_src:
- *                 type: string
- *               stream:
- *                 type: boolean
- *                 default: false
- *     responses:
- *       200:
- *         description: Generated text
- *       400:
- *         description: Validation error
- */
 router.post('/', optionalAuth, validate(generateSchema), async (req, res, next) => {
-  const { prompt, max_tokens, temperature, model_key, model_src, stream } = req.validated;
+  const {
+    prompt,
+    max_tokens,
+    temperature,
+    model_key,
+    model_src,
+    stream,
+    algorithm_id,
+  } = req.validated;
+
   const startTime = Date.now();
+  const shaped = applyAlgorithm(algorithm_id, prompt);
+  const finalPrompt = shaped.prompt;
+  const finalTemperature = temperature ?? shaped.temperature ?? 0.7;
 
   try {
     if (stream) {
@@ -55,9 +30,13 @@ router.post('/', optionalAuth, validate(generateSchema), async (req, res, next) 
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      const run = await modelManager.generateStream(prompt, {
+      if (shaped.meta.algorithm_id) {
+        res.write(`data: ${JSON.stringify({ meta: shaped.meta })}\n\n`);
+      }
+
+      const run = await modelManager.generateStream(finalPrompt, {
         max_tokens,
-        temperature,
+        temperature: finalTemperature,
         modelKey: model_key,
         modelSrc: model_src,
       });
@@ -80,9 +59,9 @@ router.post('/', optionalAuth, validate(generateSchema), async (req, res, next) 
       return;
     }
 
-    const output = await modelManager.generate(prompt, {
+    const output = await modelManager.generate(finalPrompt, {
       max_tokens,
-      temperature,
+      temperature: finalTemperature,
       modelKey: model_key,
       modelSrc: model_src,
     });
@@ -102,6 +81,7 @@ router.post('/', optionalAuth, validate(generateSchema), async (req, res, next) 
       meta: {
         duration_ms: Date.now() - startTime,
         model_key: model_key || 'default',
+        ...shaped.meta,
       },
     });
   } catch (error) {

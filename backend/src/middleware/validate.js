@@ -6,6 +6,7 @@ export const generateSchema = z.object({
   temperature: z.number().min(0).max(2).optional().default(0.7),
   model_key: z.string().optional(),
   model_src: z.string().optional(),
+  algorithm_id: z.string().optional(),
   stream: z.boolean().optional().default(false),
 });
 

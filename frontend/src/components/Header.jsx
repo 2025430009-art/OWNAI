@@ -1,4 +1,5 @@
 const NAV_ITEMS = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'install', label: 'Install' },
   { id: 'guide', label: 'User Guide' },
   { id: 'api', label: 'API' },

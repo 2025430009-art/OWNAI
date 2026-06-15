@@ -39,6 +39,36 @@ export async function initDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON usage_logs(user_id);
       CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON usage_logs(created_at);
+
+      CREATE TABLE IF NOT EXISTS ownai_qa (
+        id UUID PRIMARY KEY,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        topic VARCHAR(255) DEFAULT '',
+        source VARCHAR(50) DEFAULT 'OWN AI',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_ownai_qa_created_at ON ownai_qa(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ownai_qa_topic ON ownai_qa(topic);
+
+      CREATE TABLE IF NOT EXISTS code_library (
+        id UUID PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        code TEXT NOT NULL,
+        language VARCHAR(50) NOT NULL,
+        category VARCHAR(100) DEFAULT '',
+        tags JSONB DEFAULT '[]',
+        complexity JSONB DEFAULT '{}',
+        source VARCHAR(50) DEFAULT 'OWN AI',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_code_library_created_at ON code_library(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_code_library_language ON code_library(language);
+      CREATE INDEX IF NOT EXISTS idx_code_library_category ON code_library(category);
     `);
     logger.info('Database initialized');
   } finally {
