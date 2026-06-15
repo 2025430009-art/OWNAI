@@ -1,0 +1,6 @@
+{
+  "name": "deploy-ops",
+  "version": "1.0.0",
+  "description": "Deployment workflows for OWNAI platform",
+  "author": { "name": "OWNAI" }
+}

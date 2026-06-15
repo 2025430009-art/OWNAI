@@ -1,0 +1,6 @@
+{
+  "name": "rag-pipeline",
+  "version": "1.0.0",
+  "description": "End-to-end RAG workflow for OWNAI",
+  "author": { "name": "OWNAI" }
+}

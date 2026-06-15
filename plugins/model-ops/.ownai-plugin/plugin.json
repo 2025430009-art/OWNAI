@@ -1,0 +1,6 @@
+{
+  "name": "model-ops",
+  "version": "1.0.0",
+  "description": "Model lifecycle management for OWNAI",
+  "author": { "name": "OWNAI" }
+}

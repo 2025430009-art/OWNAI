@@ -1,0 +1,15 @@
+{
+  "description": "Voice loop session hooks",
+  "hooks": {
+    "PreCommand": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[ownai:voice] pipeline init — ensure WHISPER_MODEL_SRC and TTS_MODEL_SRC are set'"
+          }
+        ]
+      }
+    ]
+  }
+}

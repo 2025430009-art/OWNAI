@@ -1,0 +1,2 @@
+# Place GGUF model files here (e.g. llama-2-7b.gguf)
+# Or use built-in registry models via LLAMA_3_2_1B_INST_Q4_0

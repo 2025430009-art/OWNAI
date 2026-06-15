@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  @apply bg-white text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-teal-600 hover:bg-teal-700 text-white font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .input-field {
+    @apply w-full bg-white border border-slate-300 rounded-md px-4 py-2.5 text-slate-900 placeholder-slate-400
+           focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent
+           dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100 dark:placeholder-slate-500;
+  }
+  .card {
+    @apply bg-white border border-slate-200 rounded-lg dark:bg-slate-900 dark:border-slate-700;
+  }
+  .doc-code {
+    @apply overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-4 font-mono text-sm text-slate-800
+           dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200;
+  }
+  .doc-inline {
+    @apply rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-teal-700 dark:bg-slate-800 dark:text-teal-400;
+  }
+  .feature-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+  .features-section {
+    @apply bg-slate-50 dark:bg-slate-900/50;
+  }
+  .capability-card {
+    @apply border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900;
+  }
+  .architecture-section {
+    @apply bg-slate-50 dark:bg-slate-900/30;
+  }
+  .sklearn-hero {
+    @apply bg-gradient-to-b from-teal-50/60 to-white dark:from-teal-950/30 dark:to-slate-950;
+  }
+  .sklearn-bullets {
+    @apply list-disc space-y-2 pl-6 marker:text-teal-600;
+  }
+  .sklearn-btn-primary {
+    @apply rounded-md bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm
+           hover:bg-teal-700 transition-colors;
+  }
+  .sklearn-btn-secondary {
+    @apply rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold
+           text-slate-700 hover:bg-slate-50 transition-colors
+           dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+  .domain-card:hover {
+    @apply border-teal-200 dark:border-teal-800;
+  }
+}

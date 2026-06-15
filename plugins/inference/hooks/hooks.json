@@ -1,0 +1,15 @@
+{
+  "description": "Inference plugin lifecycle hooks",
+  "hooks": {
+    "PreCommand": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[ownai:inference] starting command with args: ${OWNAI_ARGS}'"
+          }
+        ]
+      }
+    ]
+  }
+}

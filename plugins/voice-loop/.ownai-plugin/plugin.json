@@ -1,0 +1,6 @@
+{
+  "name": "voice-loop",
+  "version": "1.0.0",
+  "description": "ASR + LLM + TTS voice pipeline for OWNAI",
+  "author": { "name": "OWNAI" }
+}

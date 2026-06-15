@@ -1,0 +1,2 @@
+# Place small GGUF model for on-device inference
+# Referenced in mobile/app.json @qvac/sdk/expo-plugin config

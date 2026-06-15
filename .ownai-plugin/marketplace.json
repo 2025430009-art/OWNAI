@@ -1,0 +1,54 @@
+{
+  "$schema": "https://ownai.dev/schemas/marketplace.json",
+  "name": "ownai-plugins",
+  "version": "1.0.0",
+  "description": "Official OWNAI plugin marketplace — local-first AI workflows powered by QVAC SDK",
+  "owner": {
+    "name": "OWNAI",
+    "url": "https://ownai.dev"
+  },
+  "plugins": [
+    {
+      "name": "inference",
+      "description": "Run text generation, embeddings, and multimodal inference via QVAC",
+      "version": "1.0.0",
+      "source": "./plugins/inference",
+      "category": "core"
+    },
+    {
+      "name": "rag-pipeline",
+      "description": "End-to-end RAG workflow: ingest documents, index, and query with context",
+      "version": "1.0.0",
+      "source": "./plugins/rag-pipeline",
+      "category": "core"
+    },
+    {
+      "name": "voice-loop",
+      "description": "Real-time voice pipeline combining ASR, LLM, and TTS in one loop",
+      "version": "1.0.0",
+      "source": "./plugins/voice-loop",
+      "category": "media"
+    },
+    {
+      "name": "model-ops",
+      "description": "Model lifecycle: load, cache, unload, and monitor QVAC models",
+      "version": "1.0.0",
+      "source": "./plugins/model-ops",
+      "category": "operations"
+    },
+    {
+      "name": "deploy-ops",
+      "description": "Docker and cloud deployment workflows for OWNAI platform",
+      "version": "1.0.0",
+      "source": "./plugins/deploy-ops",
+      "category": "operations"
+    },
+    {
+      "name": "capability-dev",
+      "description": "Design and scaffold new AI capabilities for the OWNAI platform",
+      "version": "1.0.0",
+      "source": "./plugins/capability-dev",
+      "category": "development"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "own-ai-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Platform with QVAC SDK - Web, Mobile, and Cloud Backend",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "mobile",
+    "ownai-core"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:mobile": "npm run start --workspace=mobile",
+    "ownai": "node ownai-core/bin/ownai.js",
+    "ownai:help": "node ownai-core/bin/ownai.js help",
+    "ownai:plugins": "node ownai-core/bin/ownai.js plugin list",
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run start --workspace=backend",
+    "test:qvac": "node backend/scripts/test-qvac.js",
+    "test:load": "npx artillery run tests/load-test.yml",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d"
+  },
+  "engines": {
+    "node": ">=22.17.0"
+  }
+}

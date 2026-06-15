@@ -1,0 +1,16 @@
+export const FALLBACK_CAPABILITIES = [
+  { id: 'text-generation', slug: 'text-generation', title: 'Text generation', description: 'LLM inference for text generation and chat.', backend: 'Fabric LLM', icon: 'text', demo: { type: 'text', placeholder: 'Ask anything...' } },
+  { id: 'text-embeddings', slug: 'text-embeddings', title: 'Text embeddings', description: 'Vector embedding generation for semantic search, clustering, and retrieval.', backend: 'Fabric LLM', icon: 'embeddings', demo: { type: 'text', placeholder: 'Text to embed...' } },
+  { id: 'rag', slug: 'rag', title: 'RAG', description: 'Out-of-the-box retrieval-augmented generation workflow.', backend: 'QVAC RAG', icon: 'rag', demo: { type: 'rag', placeholder: 'Ask a question...' } },
+  { id: 'fine-tuning', slug: 'fine-tuning', title: 'Fine-tuning', description: 'Adapting LLMs to domain-specific tasks.', backend: 'LoRA', icon: 'finetune', demo: { type: 'finetune' } },
+  { id: 'multimodal', slug: 'multimodal', title: 'Multimodal', description: 'LLM inference over text, images, and other media within a single conversation context.', backend: 'Fabric LLM', icon: 'multimodal', demo: { type: 'multimodal', placeholder: 'Describe this image...' } },
+  { id: 'image-generation', slug: 'image-generation', title: 'Image generation', description: 'Text-to-image and image-to-image generation.', backend: 'Customized Diffusion backend', icon: 'image', demo: { type: 'text', placeholder: 'A serene mountain landscape...' } },
+  { id: 'video-generation', slug: 'video-generation', title: 'Video generation', description: 'Text-to-video generation.', backend: 'Customized Diffusion backend', icon: 'video', demo: { type: 'text', placeholder: 'A drone flying over the ocean...' } },
+  { id: 'transcription', slug: 'transcription', title: 'Transcription', description: 'Automatic speech recognition (ASR).', backend: 'Customized Whisper backend or NVIDIA Parakeet', icon: 'transcription', demo: { type: 'audio' } },
+  { id: 'text-to-speech', slug: 'text-to-speech', title: 'Text-to-Speech', description: 'Speech synthesis (TTS).', backend: 'Customized GGML backend', icon: 'tts', demo: { type: 'text', placeholder: 'Text to speak...' } },
+  { id: 'voice-assistant', slug: 'voice-assistant', title: 'Voice assistant', description: 'Real-time voice pipeline combining transcription, text generation, and speech synthesis in one loop.', backend: 'Whisper + Fabric LLM + GGML TTS', icon: 'voice', demo: { type: 'audio' } },
+  { id: 'translation', slug: 'translation', title: 'Translation', description: 'Text-to-text neural machine translation (NMT).', backend: 'Fabric LLM and Bergamot', icon: 'translation', demo: { type: 'translate', placeholder: 'Text to translate...' } },
+  { id: 'vla', slug: 'vla', title: 'VLA', description: 'Vision-language-action for robot control.', backend: 'Customized GGML backend', icon: 'vla', demo: { type: 'multimodal', placeholder: 'Robot command...' } },
+  { id: 'ocr', slug: 'ocr', title: 'OCR', description: 'Extracting text from images.', backend: 'ONNX Runtime', icon: 'ocr', demo: { type: 'image' } },
+  { id: 'image-classification', slug: 'image-classification', title: 'Image classification', description: 'Classify images into labels with confidence scores.', backend: 'Customized GGML backend', icon: 'classify', demo: { type: 'image' } },
+];

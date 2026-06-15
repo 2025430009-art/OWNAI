@@ -1,0 +1,14 @@
+{
+  "name": "ownai-core",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "ownai": "bin/ownai.js"
+  },
+  "scripts": {
+    "dev": "node --watch bin/ownai.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {}
+}

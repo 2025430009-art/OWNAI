@@ -1,0 +1,6 @@
+{
+  "name": "capability-dev",
+  "version": "1.0.0",
+  "description": "Scaffold new AI capabilities for OWNAI",
+  "author": { "name": "OWNAI" }
+}

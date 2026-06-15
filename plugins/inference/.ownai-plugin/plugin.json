@@ -1,0 +1,6 @@
+{
+  "name": "inference",
+  "version": "1.0.0",
+  "description": "Run text generation, embeddings, and multimodal inference via QVAC",
+  "author": { "name": "OWNAI" }
+}
