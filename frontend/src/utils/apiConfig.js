@@ -149,12 +149,39 @@ export async function probeBackend(baseUrl = getApiBase()) {
     throw new Error(getBackendUnavailableMessage());
   }
   const url = baseUrl ? `${baseUrl}/api/v1/health` : '/api/v1/health';
-  const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  const text = await response.text();
+  const isRemote = baseUrl && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(baseUrl);
+  const timeoutMs = isRemote ? 60000 : 4000;
+
+  let response;
+  let text;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    text = await response.text();
+  } catch {
+    throw new Error(
+      isRemote
+        ? 'Backend unreachable. Render may still be starting (free tier: wait 30–60s) or the service is not deployed yet.'
+        : 'Backend unreachable. Start it with: cd backend && npm run start',
+    );
+  }
+
+  if (!response.ok && text.trim() === 'Not Found') {
+    throw new Error(
+      'No server at this URL yet. In Render, confirm the service is Live and copy the exact URL from the dashboard.',
+    );
+  }
+
   if (text.trimStart().startsWith('<')) {
     throw new Error('Backend returned a web page instead of API data. Check the URL.');
   }
-  const data = JSON.parse(text);
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Backend did not return JSON. The API may not be running on this URL.');
+  }
+
   if (!response.ok || !data.success) {
     throw new Error('Backend health check failed');
   }
