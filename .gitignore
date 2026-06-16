@@ -24,3 +24,10 @@ coverage/
 *.pem
 mobile/android/
 mobile/ios/
+
+# Python training workspace artifacts
+project/venv/
+project/outputs/
+project/**/__pycache__/
+project/**/*.pyc
+project/data/dataset.py.original
