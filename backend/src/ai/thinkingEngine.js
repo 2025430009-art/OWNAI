@@ -19,6 +19,7 @@ export const THINKING_MODES = {
   TOT: 'tree_of_thoughts',
   REACT: 'react',
   SELF_REFINE: 'self_refine',
+  HUMAN_THINK: 'human_think',
   EXTENDED: 'extended',
   SOCRATIC: 'socratic',
   DEBATE: 'debate',
@@ -284,6 +285,43 @@ Respond in EXACT JSON:
 }`;
 }
 
+export function buildHumanThinkPrompt(userMessage, context = {}) {
+  return `You are OWNAI thinking like a careful human expert — not a template bot.
+Use an inner monologue: notice assumptions, doubt yourself, backtrack when needed, then improve.
+
+PROBLEM: ${userMessage}
+CONTEXT: ${JSON.stringify(context)}
+
+Think in this human-like sequence:
+1. Inner monologue — what you first notice, feel uncertain about, and want to clarify
+2. First draft answer
+3. Honest self-critique (weaknesses, missing pieces, tone issues)
+4. Improved answer after reflection
+5. Final polished answer a human would be proud to share
+
+Respond in EXACT JSON:
+{
+  "thinking_mode": "human_think",
+  "inner_monologue": ["first thought", "doubt or question", "reframe"],
+  "iterations": [
+    {
+      "iteration": 1,
+      "draft": "Initial human-style attempt",
+      "critique": {
+        "weaknesses": ["..."],
+        "missing": ["..."],
+        "score": 0-100
+      },
+      "improvement_plan": "What to fix next"
+    }
+  ],
+  "final_answer": "Best human-quality answer after reflection",
+  "improvement_delta": "How the final answer improved",
+  "confidence_overall": 0-100,
+  "remaining_uncertainty": "What is still unclear"
+}`;
+}
+
 export function buildExtendedThinkingPrompt(userMessage, context = {}) {
   return `You are an expert tackling a genuinely hard problem.
 Use your full scratchpad: explore, doubt yourself, backtrack, try again.
@@ -380,6 +418,7 @@ export function buildPromptForMode(mode, userMessage, context = {}, tools = []) 
     [THINKING_MODES.TOT]: () => buildTOTPrompt(userMessage, context),
     [THINKING_MODES.REACT]: () => buildReActPrompt(userMessage, context, tools),
     [THINKING_MODES.SELF_REFINE]: () => buildSelfRefinePrompt(userMessage, context),
+    [THINKING_MODES.HUMAN_THINK]: () => buildHumanThinkPrompt(userMessage, context),
     [THINKING_MODES.EXTENDED]: () => buildExtendedThinkingPrompt(userMessage, context),
     [THINKING_MODES.DEBATE]: () => buildDebatePrompt(userMessage, context),
     [THINKING_MODES.SOCRATIC]: () => buildSocraticPrompt(userMessage, context),
@@ -399,6 +438,7 @@ export function buildThinkingEngineRules() {
     '- Tree of Thoughts: generate 3 branches, score each 0-100, pick the best, explain rejections.',
     '- ReAct: alternate Thought → Action → Observation until the answer is found.',
     '- Self-Refine: draft → critique → improve → repeat up to 3 refinement rounds.',
+    '- Human Think: inner monologue → draft → self-critique → improve like a careful human.',
     '- Extended Thinking: scratchpad reasoning before the final answer on hard problems.',
     '- Socratic: ask 2-3 clarifying questions, then teach through guided discovery.',
     '- Debate: argue Side A and Side B, then synthesize a balanced conclusion.',
@@ -454,6 +494,17 @@ const MODE_INSTRUCTIONS = {
     'Round 3: Improved answer addressing every critique.',
     'Optional Round 4: Second critique + final polish (max 3 refinement rounds total).',
     'Label each round clearly.',
+  ].join('\n'),
+
+  [THINKING_MODES.HUMAN_THINK]: [
+    'Think like a careful human: inner monologue first, then draft, then honest self-critique, then improve.',
+    'Show doubt, reframing, and what you would fix before the final answer.',
+    'Format:',
+    '## Inner Monologue',
+    '## Draft',
+    '## Self-Critique',
+    '## Improved Answer',
+    '## Final Answer',
   ].join('\n'),
 
   [THINKING_MODES.EXTENDED]: [
@@ -690,6 +741,7 @@ export function shouldUseAnthropicExtendedThinking(mode, anthropicAvailable) {
   if (!anthropicAvailable) return false;
   return [
     THINKING_MODES.EXTENDED,
+    THINKING_MODES.HUMAN_THINK,
     THINKING_MODES.COT,
     THINKING_MODES.TOT,
     THINKING_MODES.DEBATE,

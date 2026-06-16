@@ -65,6 +65,7 @@ const MODE_ALIASES = {
   tree_of_thoughts: THINKING_MODES.TOT,
   react: THINKING_MODES.REACT,
   self_refine: THINKING_MODES.SELF_REFINE,
+  human_think: THINKING_MODES.HUMAN_THINK,
   extended: THINKING_MODES.EXTENDED,
   socratic: THINKING_MODES.SOCRATIC,
   debate: THINKING_MODES.DEBATE,
@@ -473,7 +474,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
           parsed: result.parsed,
           tools_used: result.parsed?.tools_used,
         });
-      } else if (resolvedMode === THINKING_MODES.SELF_REFINE) {
+      } else if (resolvedMode === THINKING_MODES.SELF_REFINE || resolvedMode === THINKING_MODES.HUMAN_THINK) {
         result = await runSelfRefineThinking({
           message,
           context: enrichedContext,
@@ -560,7 +561,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
         stream: false,
         userId: resolveDbUserId(req),
       });
-    } else if (resolvedMode === THINKING_MODES.SELF_REFINE) {
+    } else if (resolvedMode === THINKING_MODES.SELF_REFINE || resolvedMode === THINKING_MODES.HUMAN_THINK) {
       result = await runSelfRefineThinking({
         message,
         context: enrichedContext,

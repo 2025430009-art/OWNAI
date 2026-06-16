@@ -294,8 +294,8 @@ export default function DashboardPage({
     activeSession &&
     activeSession.messages.length > 0;
 
-  const sectionViews = ['chats', 'projects', 'artifacts', 'customize', 'code', 'design', 'prompt-to-video', 'reference', 'code-library', 'research'];
-  const showSectionPrompt = sectionViews.includes(activeSection) && !['reference', 'code-library', 'research', 'prompt-to-video'].includes(activeSection);
+  const sectionViews = ['chats', 'projects', 'artifacts', 'customize', 'code', 'design', 'human-think', 'prompt-to-video', 'reference', 'code-library', 'research'];
+  const showSectionPrompt = sectionViews.includes(activeSection) && !['reference', 'code-library', 'research', 'prompt-to-video', 'human-think'].includes(activeSection);
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-[#f7f6f3] dark:bg-slate-950">

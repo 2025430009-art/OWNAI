@@ -32,6 +32,7 @@ const NAV_MAIN = [
 const NAV_PRODUCTS = [
   { id: 'code', label: 'Code', icon: CodeIcon },
   { id: 'design', label: 'Design', icon: PaletteIcon },
+  { id: 'human-think', label: 'Human Think', icon: BeakerIcon },
   { id: 'prompt-to-video', label: 'PromptToVideo', icon: VideoIcon },
 ];
 

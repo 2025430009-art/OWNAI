@@ -1,8 +1,72 @@
 import { useState, useCallback } from 'react';
 import { sanitizeUrl } from '../../utils/sanitizeUrl.js';
 
-function CopyButton({ text }) {
+function ToolbarButton({ children, onClick, tone = 'default' }) {
+  const toneClass = tone === 'run'
+    ? 'text-violet-300 hover:bg-violet-500/15 hover:text-violet-200'
+    : 'text-slate-400 hover:bg-white/10 hover:text-white';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] transition-colors ${toneClass}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function RunModal({ open, onClose, lines }) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
+    >
+      <div className="w-full max-w-2xl rounded-2xl border border-violet-400/30 bg-[#0f0f1a] p-5 shadow-2xl">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider text-violet-300">OWN AI Run Output</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-7 w-7 rounded-md bg-white/5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="Close run output"
+          >
+            ×
+          </button>
+        </div>
+        <pre className="max-h-[55vh] overflow-auto rounded-xl border border-white/10 bg-[#050508] p-4 font-mono text-xs leading-relaxed text-slate-200">
+          {lines.length ? (
+            lines.map((line, i) => (
+              <div
+                key={`${line.type}-${i}`}
+                className={
+                  line.type === 'err'
+                    ? 'text-rose-400'
+                    : line.type === 'info'
+                      ? 'text-violet-300'
+                      : 'text-slate-200'
+                }
+              >
+                {line.text}
+              </div>
+            ))
+          ) : (
+            <div className="text-violet-300">// No output produced.</div>
+          )}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function CodeToolbar({ text, language }) {
   const [copied, setCopied] = useState(false);
+  const [runOpen, setRunOpen] = useState(false);
+  const [runLines, setRunLines] = useState([]);
+
   const copy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -13,14 +77,53 @@ function CopyButton({ text }) {
     }
   }, [text]);
 
+  const download = useCallback(() => {
+    const ext = language?.trim() || 'txt';
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ownai-output.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [language, text]);
+
+  const run = useCallback(() => {
+    const normalized = (language || 'javascript').toLowerCase();
+    if (!['js', 'javascript', 'mjs', 'cjs'].includes(normalized)) {
+      setRunLines([{ type: 'info', text: `Run supports JavaScript only. Current language: ${normalized || 'plain'}` }]);
+      setRunOpen(true);
+      return;
+    }
+
+    const logs = [];
+    const fakeConsole = {
+      log: (...a) => logs.push({ type: 'out', text: a.map(String).join(' ') }),
+      error: (...a) => logs.push({ type: 'err', text: a.map(String).join(' ') }),
+      warn: (...a) => logs.push({ type: 'err', text: `[warn] ${a.map(String).join(' ')}` }),
+      info: (...a) => logs.push({ type: 'info', text: a.map(String).join(' ') }),
+    };
+
+    try {
+      const fn = new Function('console', text);
+      fn(fakeConsole);
+      setRunLines(logs.length ? logs : [{ type: 'info', text: '// No output produced.' }]);
+    } catch (err) {
+      setRunLines([{ type: 'err', text: `Error: ${err.message}` }]);
+    }
+    setRunOpen(true);
+  }, [language, text]);
+
   return (
-    <button
-      type="button"
-      onClick={copy}
-      className="rounded px-2 py-1 text-[11px] text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
-    >
-      {copied ? 'Copied' : 'Copy'}
-    </button>
+    <>
+      <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/10 bg-[#1a1a2e] p-1">
+        <ToolbarButton onClick={copy}>{copied ? 'Copied!' : 'Copy'}</ToolbarButton>
+        <ToolbarButton onClick={download}>Download</ToolbarButton>
+        <span className="mx-1 h-5 w-px bg-white/10" />
+        <ToolbarButton onClick={run} tone="run">Run</ToolbarButton>
+      </div>
+      <RunModal open={runOpen} onClose={() => setRunOpen(false)} lines={runLines} />
+    </>
   );
 }
 
@@ -102,7 +205,7 @@ export default function ReferenceMarkdown({ content, className = '' }) {
         <div key={`b-${bi}`} className="relative my-3 overflow-hidden rounded-lg bg-[#1E1E1E]">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
             <span className="text-[10px] uppercase tracking-wide text-slate-500">{lang || 'code'}</span>
-            <CopyButton text={code} />
+            <CodeToolbar text={code} language={lang} />
           </div>
           <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed text-slate-100">
             <code>{code}</code>

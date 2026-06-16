@@ -3,6 +3,7 @@ import CodeGeneratorPanel from './CodeGeneratorPanel.jsx';
 import PromptToVideoPanel from '../promptToVideo/PromptToVideoPanel.jsx';
 import OwnAIReferencePanel from './OwnAIReferencePanel.jsx';
 import CodeLibraryPanel from './CodeLibraryPanel.jsx';
+import HumanThinkPanel from './HumanThinkPanel.jsx';
 import { listAlgorithms } from '../../api/client.js';
 
 const SAMPLE_PROJECTS = [
@@ -290,12 +291,15 @@ export default function SectionPanel({
     'prompt-to-video': {
       body: <PromptToVideoPanel />,
     },
+    'human-think': {
+      body: <HumanThinkPanel />,
+    },
   };
 
   const view = content[section];
   if (!view) return null;
 
-  if (section === 'reference' || section === 'code-library' || section === 'prompt-to-video') {
+  if (section === 'reference' || section === 'code-library' || section === 'prompt-to-video' || section === 'human-think') {
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         {view.body}

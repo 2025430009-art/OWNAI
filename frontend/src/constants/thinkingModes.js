@@ -30,6 +30,12 @@ export const THINKING_MODE_OPTIONS = [
     tooltip: 'Draft, critique, and self-improve up to 3 times',
   },
   {
+    id: 'human',
+    label: 'Human Think',
+    apiMode: 'human_think',
+    tooltip: 'Human-like inner monologue + self-critique + improved final answer',
+  },
+  {
     id: 'deep',
     label: 'Deep',
     apiMode: 'extended',
@@ -50,6 +56,7 @@ export const MODE_LABELS = {
   tree_of_thoughts: 'Multi-branch exploration',
   react: 'Tool-augmented reasoning',
   self_refine: 'Self-improving answer',
+  human_think: 'Human-like reflective thinking',
   extended: 'Deep thinking',
   debate: 'Balanced debate analysis',
   socratic: 'Socratic method',
