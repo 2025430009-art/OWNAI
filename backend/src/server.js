@@ -127,6 +127,7 @@ async function start() {
   try {
     assertSecureConfig();
   } catch (error) {
+    console.error(`[OWN AI] Startup blocked: ${error.message}`);
     logger.error(error.message);
     process.exit(1);
   }
@@ -184,13 +185,17 @@ async function start() {
 
   await ensurePromptToVideoDirs().catch(() => {});
 
-  server.listen(listenPort, () => {
-    logger.info(`OWN AI API running on http://localhost:${listenPort}`);
+  const host = process.env.HOST || '0.0.0.0';
+  const publicUrl = process.env.RENDER_EXTERNAL_URL
+    || (config.nodeEnv === 'production' ? `http://0.0.0.0:${listenPort}` : `http://localhost:${listenPort}`);
+
+  server.listen(listenPort, host, () => {
+    logger.info(`OWN AI API running on ${publicUrl}`);
     if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') {
-      logger.info(`Swagger docs at http://localhost:${listenPort}/api-docs`);
+      logger.info(`Swagger docs at ${publicUrl.replace(/\/$/, '')}/api-docs`);
     }
-    logger.info(`OpenAI-compatible API at http://localhost:${listenPort}/v1`);
-    if (listenPort !== config.port) {
+    logger.info(`OpenAI-compatible API at ${publicUrl.replace(/\/$/, '')}/v1`);
+    if (listenPort !== config.port && config.nodeEnv !== 'production') {
       logger.warn(`Port ${config.port} was busy — using ${listenPort} instead`);
     }
   });
@@ -209,7 +214,8 @@ async function start() {
 }
 
 start().catch((error) => {
-  logger.error('Failed to start server', { error: error.message });
+  console.error(`[OWN AI] Failed to start server: ${error.message}`);
+  logger.error('Failed to start server', { error: error.message, stack: error.stack });
   process.exit(1);
 });
 

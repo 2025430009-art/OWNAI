@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+.git
+.env
+.env.*
+logs
+uploads
+outputs
+project/venv
+**/__pycache__
+frontend/dist
+mobile
+ownai-core
+*.md
+.github

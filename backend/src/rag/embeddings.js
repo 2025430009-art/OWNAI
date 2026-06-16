@@ -1,13 +1,21 @@
-import { pipeline } from '@xenova/transformers';
 import { logger } from '../utils/logger.js';
 
 let embedder = null;
 let embedderLoading = null;
+let pipelineFn = null;
+
+async function loadPipeline() {
+  if (pipelineFn) return pipelineFn;
+  const mod = await import('@xenova/transformers');
+  pipelineFn = mod.pipeline;
+  return pipelineFn;
+}
 
 async function getEmbedder() {
   if (embedder) return embedder;
   if (embedderLoading) return embedderLoading;
 
+  const pipeline = await loadPipeline();
   embedderLoading = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
     .then((pipe) => {
       embedder = pipe;

@@ -30,6 +30,14 @@ export function killPort(port) {
 }
 
 export async function resolveListenPort(preferred) {
+  if (process.env.NODE_ENV === 'production') {
+    const port = parseInt(process.env.PORT || String(preferred || 3000), 10);
+    if (!Number.isFinite(port) || port <= 0) {
+      throw new Error(`Invalid PORT for production: ${process.env.PORT}`);
+    }
+    return port;
+  }
+
   const start = preferred || 3001;
   for (let port = start; port < start + 8; port += 1) {
     if (await isPortFree(port)) return port;
