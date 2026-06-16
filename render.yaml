@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: ownai-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start
+    autoDeploy: true
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: REQUIRE_API_AUTH
+        value: "true"
+      - key: CORS_ORIGIN
+        # Replace with your Pages URL (and optional localhost dev origin)
+        value: "https://2025430009-art.github.io,http://localhost:5176"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: STABILITY_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        value: "21m00Tcm4TlvDq8ikWAM"
+      - key: REPLICATE_API_KEY
+        sync: false
+      - key: MUBERT_API_KEY
+        sync: false

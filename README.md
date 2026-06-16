@@ -71,6 +71,30 @@ The live demo at [GitHub Pages](https://2025430009-art.github.io/OWNAI/) hosts *
 | `VITE_API_URL` GitHub secret | GitHub Pages deploy with a remote API |
 | Connect panel in the UI | Runtime override (saved in browser localStorage) |
 
+### Deploy backend on Render (recommended for Pages)
+
+This repo now includes a Render blueprint at `render.yaml` for the backend service.
+
+1. In Render, create a **Blueprint** from this repository (or create a Web Service manually).
+2. Ensure service points to:
+   - `rootDir: backend`
+   - build command: `npm install`
+   - start command: `npm run start`
+3. Set required environment variables in Render:
+   - `DATABASE_URL`
+   - `MONGODB_URI`
+   - `API_KEY`
+   - `JWT_SECRET` (auto-generated in blueprint)
+   - Any model/API keys you use (`ANTHROPIC_API_KEY`, `STABILITY_API_KEY`, etc.)
+4. Set `CORS_ORIGIN` to include your Pages origin:
+   - `https://2025430009-art.github.io`
+5. Copy your Render backend URL, e.g. `https://ownai-backend.onrender.com`
+6. In GitHub repo settings, add Actions secret:
+   - `VITE_API_URL=https://ownai-backend.onrender.com`
+7. Re-run the **Deploy OWNAI** workflow (or push to `main`) so Pages is rebuilt with the backend URL.
+
+After deploy, frontend calls `/api` to your Render backend and backend features become available on the live site.
+
 Example `.env`:
 
 ```bash
