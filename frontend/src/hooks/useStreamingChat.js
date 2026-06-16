@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react';
-import { generateText, queryRag } from '../api/client.js';
+import { generateText, queryRag, thinkMessage } from '../api/client.js';
+import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
 import { streamPromptResponse } from '../utils/promptEngine.js';
 import { buildChatMessages, resolveHistory } from '../utils/memory.js';
 import ownaiMemory from '../utils/ownaiMemory.js';
 import { detectTask } from '../utils/modelRouter.js';
+import { apiModeFromUiId, shouldUseThinkEndpoint } from '../constants/thinkingModes.js';
 import {
   detectAIMode,
   AI_MODES,
@@ -21,31 +23,14 @@ async function consumeStream(tokenStream, onToken) {
   return accumulated;
 }
 
-async function streamBackendSse(response, onToken) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let accumulated = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    for (const line of chunk.split('\n')) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6);
-      if (data === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.token) {
-          accumulated += parsed.token;
-          onToken?.(accumulated, parsed.token);
-        }
-      } catch {
-        // skip
-      }
-    }
-  }
-  return accumulated;
+async function streamBackendSse(response, onToken, onThinking, onConfidence, onMeta, onThinkingResult) {
+  return consumeThinkingSse(response, {
+    onText: (full) => onToken?.(full),
+    onThinking: (full) => onThinking?.(full),
+    onConfidence: (conf) => onConfidence?.(conf),
+    onMeta: (meta) => onMeta?.(meta),
+    onThinkingResult: (tr) => onThinkingResult?.(tr),
+  });
 }
 
 /**
@@ -62,11 +47,17 @@ export default function useStreamingChat() {
     message,
     history = [],
     onToken,
+    onThinking,
+    onConfidence,
+    onMeta,
+    onThinkingResult,
     temperature = 0.7,
     max_tokens = 512,
     model_key,
     algorithm_id,
     useRag = true,
+    thinkingModeUi = 'auto',
+    sessionId,
   }) => {
     const prompt = message.trim();
     if (!prompt) return { content: '', model: activeModel, mode: activeMode };
@@ -111,11 +102,11 @@ export default function useStreamingChat() {
       onToken?.(full);
     };
 
-    const persist = (content) => {
+    const persist = (content, extra = {}) => {
       ownaiMemory.remember('user', prompt);
       ownaiMemory.remember('assistant', content);
       setMemoryFacts(ownaiMemory.getFacts());
-      return { content, model: modelLabel, mode: task.mode };
+      return { content, model: modelLabel, mode: task.mode, ...extra };
     };
 
     try {
@@ -128,18 +119,49 @@ export default function useStreamingChat() {
       }
 
       if (await canReachBackend()) {
-        const backendResponse = await generateText({
-          prompt,
-          messages: resolvedHistory,
-          max_tokens,
-          temperature,
-          model_key,
-          algorithm_id,
-          stream: true,
-          use_rag: useRag,
+        const useThink = shouldUseThinkEndpoint(thinkingModeUi, false);
+        const apiMode = apiModeFromUiId(thinkingModeUi);
+
+        const backendResponse = useThink
+          ? await thinkMessage({
+              message: prompt,
+              mode: apiMode,
+              sessionId,
+              context: {
+                score_confidence: true,
+              },
+              stream: true,
+              use_extended_thinking: apiMode === 'extended',
+            })
+          : await generateText({
+              prompt,
+              messages: resolvedHistory,
+              max_tokens,
+              temperature,
+              model_key,
+              algorithm_id,
+              stream: true,
+              use_rag: useRag,
+              enable_thinking: true,
+              reasoning_mode: 'direct',
+            });
+        const streamed = await streamBackendSse(
+          backendResponse,
+          handleToken,
+          (thinking) => onThinking?.(thinking),
+          (conf) => onConfidence?.(conf),
+          (meta) => onMeta?.(meta),
+          (tr) => onThinkingResult?.(tr),
+        );
+        return persist(streamed.text || '', {
+          thinking: streamed.thinking,
+          confidence: streamed.confidence,
+          confidenceDetail: streamed.confidence?.detail,
+          thinkingResult: streamed.thinkingResult,
+          reasoningMode: streamed.meta?.reasoning_mode,
+          modeReason: streamed.meta?.mode_reason,
+          autoDetected: streamed.meta?.auto_detected,
         });
-        const content = await streamBackendSse(backendResponse, handleToken);
-        return persist(content);
       }
 
       const content = await consumeStream(streamPromptResponse(prompt), handleToken);

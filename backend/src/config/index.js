@@ -35,6 +35,19 @@ export const config = {
       || (process.env.NODE_ENV === 'production' && process.env.REQUIRE_API_AUTH !== 'false'),
     apiKey: process.env.API_KEY || null,
   },
+  rag: {
+    maxDocsPerUser: parseInt(process.env.MAX_RAG_DOCS_PER_USER || '100', 10),
+    adminUserIds: new Set(
+      (process.env.ADMIN_USER_IDS || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  },
+  anthropic: {
+    apiKey: process.env.ANTHROPIC_API_KEY || null,
+    thinkingBudgetTokens: parseInt(process.env.ANTHROPIC_THINKING_BUDGET || '8000', 10),
+  },
 };
 
 const INSECURE_JWT_SECRETS = new Set([
@@ -44,7 +57,20 @@ const INSECURE_JWT_SECRETS = new Set([
 ]);
 
 export function assertSecureConfig() {
+  if (process.env.DATABASE_URL?.includes('ownai:ownai@')) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('FATAL: Default database credentials detected in production. Rotate DATABASE_URL immediately.');
+    }
+    console.warn('[Security] Default DB credentials in use. Fine for dev, must be rotated before production deploy.');
+  }
+
   if (config.nodeEnv !== 'production') return;
+
+  if (process.env.REQUIRE_API_AUTH !== 'true') {
+    throw new Error(
+      'REQUIRE_API_AUTH must be set to "true" in production. Update your .env file.',
+    );
+  }
 
   const secret = process.env.JWT_SECRET || config.jwt.secret;
   if (!secret || INSECURE_JWT_SECRETS.has(secret)) {
@@ -57,5 +83,13 @@ export function assertSecureConfig() {
     console.warn(
       '[security] REQUIRE_API_AUTH is enabled but API_KEY is not set — only JWT auth will be accepted.',
     );
+  }
+
+  if (process.env.SWAGGER_ENABLED === 'true') {
+    if (!process.env.SWAGGER_USER?.trim() || !process.env.SWAGGER_PASSWORD) {
+      throw new Error(
+        'SWAGGER_USER and SWAGGER_PASSWORD must be set when SWAGGER_ENABLED=true. Update your .env file.',
+      );
+    }
   }
 }

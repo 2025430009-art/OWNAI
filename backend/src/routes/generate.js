@@ -2,12 +2,25 @@ import { Router } from 'express';
 import { validate, generateSchema } from '../middleware/validate.js';
 import { inferenceAuth } from '../middleware/auth.js';
 import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
-import { modelManager } from '../services/modelManager.js';
 import { applyAlgorithm } from '../services/algorithmService.js';
 import { buildConversationHistory } from '../utils/conversationHistory.js';
 import { buildRagContext, augmentPromptWithRag } from '../rag/ragChain.js';
+import { resolveRagNamespace } from '../rag/namespace.js';
+import { applyResearchChatAugmentation } from '../research/ragIntegration.js';
+import { enrichWithResearchContext } from '../research/researchChatContext.js';
+import {
+  runThinkingGeneration,
+  streamThinkingToResponse,
+  writeThinkingSseEvent,
+} from '../services/thinkingGenerationService.js';
 import { logUsage } from '../db/index.js';
 import { logger } from '../utils/logger.js';
+import { resolveDbUserId } from '../services/thinkingLogService.js';
+import {
+  buildMemoryContext,
+  applyMemoryPrefixToHistory,
+  scheduleMemoryExtraction,
+} from '../ai/memoryEngine.js';
 
 const router = Router();
 
@@ -22,45 +35,71 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), 
     stream,
     algorithm_id,
     use_rag,
+    reasoning_mode,
+    enable_thinking,
   } = req.validated;
 
   const startTime = Date.now();
   const shaped = applyAlgorithm(algorithm_id, prompt);
-  const finalPrompt = shaped.prompt;
-  const finalTemperature = temperature ?? shaped.temperature ?? 0.7;
-
-  let conversationHistory;
-  if (use_rag) {
-    const ragContext = await buildRagContext(finalPrompt).catch(() => null);
-    conversationHistory = augmentPromptWithRag(finalPrompt, ragContext, messages || []);
-  } else {
-    conversationHistory = buildConversationHistory(messages || [], finalPrompt);
-  }
-  const modelOptions = {
-    max_tokens,
-    temperature: finalTemperature,
-    modelKey: model_key,
-    modelSrc: model_src,
-    history: conversationHistory,
-  };
+  let finalPrompt = shaped.prompt;
 
   try {
+    const researchPrefix = await enrichWithResearchContext(req, finalPrompt).catch(() => null);
+    if (researchPrefix) {
+      finalPrompt = researchPrefix + finalPrompt;
+    }
+
+    let conversationHistory;
+    if (use_rag) {
+      const ragNamespace = resolveRagNamespace(req);
+      const ragContext = await buildRagContext(finalPrompt, 3, ragNamespace).catch(() => null);
+      conversationHistory = augmentPromptWithRag(finalPrompt, ragContext, messages || []);
+    } else {
+      conversationHistory = buildConversationHistory(messages || [], finalPrompt);
+    }
+
+    if (req.user?.id) {
+      conversationHistory = await applyResearchChatAugmentation(
+        conversationHistory,
+        finalPrompt,
+        req.user.id,
+      ).catch(() => conversationHistory);
+    }
+
+    const dbUserId = resolveDbUserId(req);
+    if (dbUserId) {
+      const memoryPrefix = await buildMemoryContext(finalPrompt, dbUserId).catch(() => '');
+      conversationHistory = applyMemoryPrefixToHistory(conversationHistory, memoryPrefix);
+    }
+
+    const thinkingContext = {
+      hasResearchContext: Boolean(researchPrefix),
+      isResearch: Boolean(researchPrefix),
+    };
+
+    const generationParams = {
+      prompt: finalPrompt,
+      history: conversationHistory,
+      maxTokens: max_tokens,
+      temperature: temperature ?? shaped.temperature ?? 0.7,
+      modelKey: model_key,
+      modelSrc: model_src,
+      reasoningMode: enable_thinking ? reasoning_mode : 'direct',
+      context: thinkingContext,
+    };
+
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
       if (shaped.meta.algorithm_id) {
-        res.write(`data: ${JSON.stringify({ meta: shaped.meta })}\n\n`);
+        writeThinkingSseEvent(res, { type: 'meta', algorithm_id: shaped.meta.algorithm_id });
       }
 
-      const run = await modelManager.generateStream(finalPrompt, modelOptions);
+      const streamResult = await streamThinkingToResponse(res, generationParams);
 
-      for await (const token of run.tokenStream) {
-        res.write(`data: ${JSON.stringify({ token })}\n\n`);
-      }
-      res.write('data: [DONE]\n\n');
-      res.end();
+      scheduleMemoryExtraction(finalPrompt, streamResult?.text || '', dbUserId);
 
       await logUsage({
         userId: req.user?.id ?? null,
@@ -74,7 +113,27 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), 
       return;
     }
 
-    const output = await modelManager.generate(finalPrompt, modelOptions);
+    let output = '';
+    let thinking = '';
+    let confidence = null;
+    let meta = {};
+
+    const result = await runThinkingGeneration({
+      ...generationParams,
+      onEvent: (event) => {
+        if (event.type === 'text') output += event.token;
+        if (event.type === 'thinking') thinking += event.token;
+        if (event.type === 'text_replace') output = event.text;
+        if (event.type === 'thinking_replace') thinking = event.text;
+        if (event.type === 'confidence') confidence = { score: event.score, reasoning: event.reasoning };
+        if (event.type === 'meta') meta = { ...meta, ...event };
+      },
+    });
+
+    output = result.text || output;
+    thinking = result.thinking || thinking;
+
+    scheduleMemoryExtraction(finalPrompt, output, dbUserId);
 
     await logUsage({
       userId: req.user?.id ?? null,
@@ -88,14 +147,31 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), 
     res.json({
       success: true,
       output,
+      thinking,
+      confidence,
       meta: {
         duration_ms: Date.now() - startTime,
         model_key: model_key || 'default',
+        reasoning_mode: result.mode,
         ...shaped.meta,
+        ...meta,
       },
     });
   } catch (error) {
-    next(error);
+    if (!res.headersSent) {
+      return next(error);
+    }
+    writeThinkingSseEvent(res, {
+      type: 'text',
+      token: 'Sorry, an error occurred while generating a response.',
+    });
+    writeThinkingSseEvent(res, {
+      type: 'confidence',
+      score: 10,
+      reasoning: error.message,
+    });
+    res.write('data: [DONE]\n\n');
+    res.end();
   }
 });
 

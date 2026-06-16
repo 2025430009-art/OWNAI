@@ -7,6 +7,17 @@ import { findUserByEmail, createUser, getUserUsageStats, isDatabaseAvailable } f
 
 const router = Router();
 
+const AUTH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
+function setAuthCookie(res, token) {
+  res.cookie('auth_token', token, AUTH_COOKIE_OPTIONS);
+}
+
 /**
  * @openapi
  * /api/v1/auth/signup:
@@ -46,10 +57,10 @@ router.post('/signup', authRateLimiter, validate(signupSchema), async (req, res,
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await createUser(email, passwordHash);
     const token = signToken({ id: user.id, email: user.email });
+    setAuthCookie(res, token);
 
     res.status(201).json({
       success: true,
-      token,
       user: { id: user.id, email: user.email },
     });
   } catch (error) {
@@ -87,9 +98,9 @@ router.post('/login', authRateLimiter, validate(loginSchema), async (req, res, n
     }
 
     const token = signToken({ id: user.id, email: user.email });
+    setAuthCookie(res, token);
     res.json({
       success: true,
-      token,
       user: { id: user.id, email: user.email },
     });
   } catch (error) {
@@ -98,6 +109,22 @@ router.post('/login', authRateLimiter, validate(loginSchema), async (req, res, n
     }
     next(error);
   }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/logout:
+ *   post:
+ *     summary: Clear auth session cookie
+ *     tags: [Auth]
+ */
+router.post('/logout', (_req, res) => {
+  res.clearCookie('auth_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+  res.json({ success: true });
 });
 
 /**

@@ -32,3 +32,12 @@ export const computeRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many compute requests, please slow down' },
 });
+
+/** Mode comparison runs multiple LLM calls — keep a separate, stricter cap. */
+export const compareRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: parseInt(process.env.COMPARE_RATE_LIMIT_MAX || '10', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many mode comparisons, please try again later' },
+});

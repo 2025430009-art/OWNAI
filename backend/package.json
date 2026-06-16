@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test tests/mathSolver.test.js tests/aiResearchSolver.test.js tests/ownaiQa.test.js tests/codeLibrary.test.js tests/safeExpression.test.js tests/conversationHistory.test.js tests/modelRouter.test.js tests/ragDocumentLoader.test.js tests/pdfParser.test.js",
+    "test": "node --test tests/mathSolver.test.js tests/aiResearchSolver.test.js tests/ownaiQa.test.js tests/codeLibrary.test.js tests/safeExpression.test.js tests/conversationHistory.test.js tests/trustedConversation.test.js tests/modelRouter.test.js tests/ragDocumentLoader.test.js tests/ragNamespace.test.js tests/pdfParser.test.js tests/literatureEngine.test.js tests/codeEngine.test.js tests/ragIntegration.test.js tests/simulationEngine.test.js tests/researchChatContext.test.js tests/thinkingEngine.test.js tests/thinkingRoutes.test.js tests/toolEngine.test.js tests/refinementEngine.test.js tests/memoryEngine.test.js",
+    "migrate:research": "node src/db/migrations/runResearchMigration.js",
+    "migrate:thinking": "node src/db/migrations/runThinkingMigration.js",
+    "migrate:memory": "node src/db/migrations/runMemoryMigration.js",
     "build": "echo 'No build step required for backend'"
   },
   "dependencies": {
@@ -14,6 +17,7 @@
     "@xenova/transformers": "^2.17.2",
     "bcryptjs": "^2.4.3",
     "chromadb": "^3.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

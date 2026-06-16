@@ -9,14 +9,24 @@ export function verifyToken(token) {
   return jwt.verify(token, config.jwt.secret);
 }
 
-export function authMiddleware(req, res, next) {
+function extractToken(req) {
+  const cookieToken = req.cookies?.auth_token;
+  if (cookieToken) return cookieToken;
+
   const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
+  if (header?.startsWith('Bearer ')) {
+    return header.slice(7);
+  }
+  return header?.replace('Bearer ', '') || null;
+}
+
+export function authMiddleware(req, res, next) {
+  const token = extractToken(req);
+  if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
   try {
-    const token = header.slice(7);
     req.user = verifyToken(token);
     next();
   } catch {
@@ -25,10 +35,10 @@ export function authMiddleware(req, res, next) {
 }
 
 export function optionalAuth(req, _res, next) {
-  const header = req.headers.authorization;
-  if (header?.startsWith('Bearer ')) {
+  const token = extractToken(req);
+  if (token) {
     try {
-      req.user = verifyToken(header.slice(7));
+      req.user = verifyToken(token);
     } catch {
       req.user = null;
     }
@@ -37,9 +47,9 @@ export function optionalAuth(req, _res, next) {
 }
 
 function authenticateRequest(req) {
-  const header = req.headers.authorization;
-  if (header?.startsWith('Bearer ')) {
-    return verifyToken(header.slice(7));
+  const token = extractToken(req);
+  if (token) {
+    return verifyToken(token);
   }
 
   const apiKey = req.headers['x-api-key'];
@@ -50,9 +60,12 @@ function authenticateRequest(req) {
   return null;
 }
 
-/** Require JWT or API key when security.requireAuth is enabled; otherwise optional. */
+/** Require JWT or API key when security.requireAuth is enabled; otherwise optional in dev only. */
 export function inferenceAuth(req, res, next) {
   if (!config.security.requireAuth) {
+    if (config.nodeEnv === 'production') {
+      return res.status(401).json({ error: 'Authentication required in production' });
+    }
     return optionalAuth(req, res, next);
   }
 

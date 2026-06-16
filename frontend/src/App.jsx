@@ -14,13 +14,15 @@ import ExamplesPage from './pages/ExamplesPage.jsx';
 import CommunityPage from './pages/CommunityPage.jsx';
 import ReleaseHighlightsPage from './pages/ReleaseHighlightsPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
-import { healthCheck, listModels, getMe, listCapabilities } from './api/client.js';
+import ResearchPage from './pages/ResearchPage.jsx';
+import { healthCheck, listModels, getMe, listCapabilities, logout, listResearchProjects } from './api/client.js';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [apiStatus, setApiStatus] = useState('checking');
   const [models, setModels] = useState([]);
   const [capabilities, setCapabilities] = useState([]);
+  const [researchCount, setResearchCount] = useState(0);
   const [activeCapability, setActiveCapability] = useState(null);
   const [tab, setTab] = useState('home');
   const [theme, setTheme] = useState(() => localStorage.getItem('ownai-theme') || 'light');
@@ -43,16 +45,29 @@ export default function App() {
       .then((data) => setCapabilities(data.capabilities || []))
       .catch(() => {});
 
-    const token = localStorage.getItem('ownai_token');
-    if (token) {
-      getMe()
-        .then((data) => setUser(data.user))
-        .catch(() => localStorage.removeItem('ownai_token'));
-    }
+    getMe()
+      .then((data) => {
+        setUser(data.user);
+        if (data.user) {
+          listResearchProjects()
+            .then((res) => {
+              const active = (res.projects || []).filter((p) => p.status === 'active');
+              setResearchCount(active.length);
+            })
+            .catch(() => setResearchCount(0));
+        } else {
+          setResearchCount(0);
+        }
+      })
+      .catch(() => setUser(null));
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('ownai_token');
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // Clear local UI state even if backend is unreachable
+    }
     setUser(null);
   };
 
@@ -79,6 +94,7 @@ export default function App() {
           apiStatus={apiStatus}
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          researchCount={researchCount}
         />
       )}
 
@@ -106,11 +122,19 @@ export default function App() {
             models={models}
             user={user}
             onSignIn={() => navigate('account')}
+            onNavigate={navigate}
             theme={theme}
             onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           />
         )}
-        {tab === 'playground' && <ChatInterface models={models} />}
+        {tab === 'playground' && <ChatInterface models={models} user={user} />}
+        {tab === 'research' && (
+          <ResearchPage
+            user={user}
+            onNavigate={navigate}
+            onSignIn={() => navigate('account')}
+          />
+        )}
         {tab === 'account' && (
           <div className="mx-auto max-w-md px-4 py-12">
             {user ? (

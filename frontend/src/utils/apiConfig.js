@@ -42,20 +42,30 @@ export function isLocalDev() {
 
 /**
  * Resolved backend origin.
- * Priority: VITE_API_URL → localStorage → localhost default (dev only) → none (GitHub Pages).
+ * Priority: VITE_API_URL → localStorage → Vite dev proxy (relative URLs) → localhost default.
  */
 export function getApiBase() {
   if (BUILT_IN) return BUILT_IN;
   if (typeof window !== 'undefined') {
-    const stored = normalizeApiUrl(localStorage.getItem(STORAGE_KEY));
+    let stored = normalizeApiUrl(localStorage.getItem(STORAGE_KEY));
+    // In Vite dev, ignore stale http://localhost:3000 — backend may bind another port
+    if (stored && import.meta.env?.DEV && stored === DEFAULT_LOCAL_API_URL) {
+      stored = '';
+    }
     if (stored) return stored;
+  }
+  // Vite dev: same-origin /api requests go through vite.config.js proxy
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && isLocalDev()) {
+    return '';
   }
   if (isLocalDev()) return DEFAULT_LOCAL_API_URL;
   return '';
 }
 
 export function hasBackendConfigured() {
-  return Boolean(getApiBase());
+  const base = getApiBase();
+  if (base) return true;
+  return typeof import.meta !== 'undefined' && import.meta.env?.DEV && isLocalDev();
 }
 
 /** Build a full API URL or throw if no backend is configured (e.g. GitHub Pages). */
@@ -63,6 +73,7 @@ export function apiUrl(path) {
   const base = getApiBase();
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   if (!base) {
+    if (hasBackendConfigured()) return normalizedPath;
     throw new Error(getBackendUnavailableMessage());
   }
   return `${base}${normalizedPath}`;
@@ -107,14 +118,15 @@ export function getApiStatusMessage() {
 }
 
 export function healthUrl(base = getApiBase()) {
-  return base ? `${base}/api/v1/health` : '';
+  if (!base) return '/api/v1/health';
+  return `${base}/api/v1/health`;
 }
 
 export async function probeBackend(baseUrl = getApiBase()) {
-  if (!baseUrl) {
+  if (!baseUrl && !hasBackendConfigured()) {
     throw new Error(getBackendUnavailableMessage());
   }
-  const url = `${baseUrl}/api/v1/health`;
+  const url = baseUrl ? `${baseUrl}/api/v1/health` : '/api/v1/health';
   const response = await fetch(url, { signal: AbortSignal.timeout(4000) });
   const text = await response.text();
   if (text.trimStart().startsWith('<')) {
@@ -128,10 +140,9 @@ export async function probeBackend(baseUrl = getApiBase()) {
 }
 
 export async function canReachBackend() {
-  const base = getApiBase();
-  if (!base) return false;
+  if (!hasBackendConfigured()) return false;
   try {
-    await probeBackend(base);
+    await probeBackend();
     return true;
   } catch {
     return false;

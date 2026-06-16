@@ -4,10 +4,14 @@ import WelcomePanel from '../components/dashboard/WelcomePanel.jsx';
 import ChatPanel from '../components/dashboard/ChatPanel.jsx';
 import PromptInput from '../components/dashboard/PromptInput.jsx';
 import SectionPanel from '../components/dashboard/SectionPanel.jsx';
+import ResearchPage from './ResearchPage.jsx';
 import useChatSessions from '../hooks/useChatSessions.js';
-import { uploadAttachments, deleteAttachment, listAIEngines, ingestRagDocument } from '../api/client.js';
+import useResearchProject from '../hooks/useResearchProject.js';
+import { uploadAttachments, deleteAttachment, listAIEngines, ingestRagDocument, listMemories, listThinkingLogs } from '../api/client.js';
 import useAI from '../hooks/useAI.js';
 import BackendConnectPanel from '../components/dashboard/BackendConnectPanel.jsx';
+import MemoryPanel from '../components/dashboard/MemoryPanel.jsx';
+import ThinkingHistoryPanel from '../components/dashboard/ThinkingHistoryPanel.jsx';
 import { getSessionContext } from '../utils/memory.js';
 import { FALLBACK_ENGINES, resolveEngine } from '../utils/aiEngines.js';
 
@@ -17,9 +21,11 @@ export default function DashboardPage({
   models,
   user,
   onSignIn,
+  onNavigate,
   theme,
   onToggleTheme,
 }) {
+  const { project, activeCount } = useResearchProject();
   const {
     sessions,
     activeId,
@@ -29,6 +35,7 @@ export default function DashboardPage({
     deleteSession,
     appendMessage,
     updateLastMessage,
+    patchLastAssistant,
     replaceLastAssistant,
     removeStreamingPlaceholder,
   } = useChatSessions();
@@ -45,6 +52,13 @@ export default function DashboardPage({
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [thinkingMode, setThinkingMode] = useState(
+    () => localStorage.getItem('ownai-thinking-mode') || 'auto',
+  );
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
+  const [thinkingHistoryOpen, setThinkingHistoryOpen] = useState(false);
+  const [memoryCount, setMemoryCount] = useState(null);
+  const [thinkingLogs, setThinkingLogs] = useState([]);
   const chatEndRef = useRef(null);
   const saveToReferenceRef = useRef(null);
   const { send: sendAI, friendlyAIError, modeLabel, taskMode, activeModel, memoryFacts, clearMemory } = useAI();
@@ -62,6 +76,24 @@ export default function DashboardPage({
   useEffect(() => {
     localStorage.setItem('ownai-selected-engine', selectedEngine);
   }, [selectedEngine]);
+
+  useEffect(() => {
+    localStorage.setItem('ownai-thinking-mode', thinkingMode);
+  }, [thinkingMode]);
+
+  const refreshMemoryAndLogs = useCallback(() => {
+    if (!user) return;
+    listMemories()
+      .then((data) => setMemoryCount((data.memories || []).length))
+      .catch(() => setMemoryCount(null));
+    listThinkingLogs()
+      .then((data) => setThinkingLogs((data.logs || []).slice(0, 10)))
+      .catch(() => setThinkingLogs([]));
+  }, [user]);
+
+  useEffect(() => {
+    refreshMemoryAndLogs();
+  }, [refreshMemoryAndLogs]);
 
   useEffect(() => {
     if (activeSection === 'chat' && activeSession?.messages.length) {
@@ -91,6 +123,13 @@ export default function DashboardPage({
     const attachmentIds = attachments.map((a) => a.id);
     const promptText = trimmed || 'Summarize and answer based on the attached files.';
     const { model_key, algorithm_id } = resolveEngine(selectedEngine, engines);
+    let latestThinking = '';
+    let latestConfidence = null;
+    let latestThinkingResult = null;
+    let latestReasoningMode = null;
+    let latestModeReason = null;
+    let latestAutoDetected = null;
+    let latestConfidenceDetail = null;
 
     try {
       const result = await sendAI({
@@ -102,14 +141,52 @@ export default function DashboardPage({
         algorithm_id,
         attachmentIds,
         sessionId,
+        thinkingModeUi: thinkingMode,
         onToken: (full) => {
           updateLastMessage(sessionId, full, true);
+        },
+        onThinking: (thinking) => {
+          latestThinking = thinking;
+          patchLastAssistant(sessionId, { thinking, streaming: true });
+        },
+        onMeta: (meta) => {
+          if (meta.reasoning_mode) {
+            latestReasoningMode = meta.reasoning_mode;
+            patchLastAssistant(sessionId, {
+              reasoningMode: meta.reasoning_mode,
+              modeReason: meta.mode_reason,
+              autoDetected: meta.auto_detected,
+            });
+          }
+          if (meta.mode_reason) latestModeReason = meta.mode_reason;
+          if (meta.auto_detected != null) latestAutoDetected = meta.auto_detected;
+        },
+        onConfidence: (confidence) => {
+          latestConfidence = confidence;
+          latestConfidenceDetail = confidence?.detail;
+          patchLastAssistant(sessionId, {
+            confidence,
+            confidenceDetail: confidence?.detail,
+          });
+        },
+        onThinkingResult: (thinkingResult) => {
+          latestThinkingResult = thinkingResult;
+          patchLastAssistant(sessionId, { thinkingResult, streaming: true });
         },
       });
 
       const content = result?.content ?? (typeof result === 'string' ? result : '');
-      replaceLastAssistant(sessionId, content || 'No response received.');
+      replaceLastAssistant(sessionId, content || 'No response received.', {
+        thinking: result?.thinking ?? latestThinking,
+        confidence: result?.confidence ?? latestConfidence,
+        confidenceDetail: result?.confidenceDetail ?? latestConfidenceDetail,
+        thinkingResult: result?.thinkingResult ?? latestThinkingResult,
+        reasoningMode: result?.reasoningMode ?? latestReasoningMode,
+        modeReason: result?.modeReason ?? latestModeReason,
+        autoDetected: result?.autoDetected ?? latestAutoDetected,
+      });
       setAttachments([]);
+      refreshMemoryAndLogs();
 
       if (saveToReferenceRef.current && content.trim()) {
         saveToReferenceRef.current(userLabel, content, 'Chat');
@@ -129,6 +206,7 @@ export default function DashboardPage({
     ensureSession,
     appendMessage,
     updateLastMessage,
+    patchLastAssistant,
     replaceLastAssistant,
     removeStreamingPlaceholder,
     temperature,
@@ -137,6 +215,8 @@ export default function DashboardPage({
     sendAI,
     friendlyAIError,
     activeSession,
+    thinkingMode,
+    refreshMemoryAndLogs,
   ]);
 
   const handleAttach = async (files) => {
@@ -187,6 +267,11 @@ export default function DashboardPage({
     setActiveSection('chat');
   };
 
+  const handleRecallMemory = () => {
+    setMemoryPanelOpen(false);
+    sendMessage('What do you remember about me?');
+  };
+
   const showWelcome =
     activeSection === 'chat' &&
     (!activeSession || activeSession.messages.length === 0) &&
@@ -197,8 +282,8 @@ export default function DashboardPage({
     activeSession &&
     activeSession.messages.length > 0;
 
-  const sectionViews = ['chats', 'projects', 'artifacts', 'customize', 'code', 'design', 'reference', 'code-library'];
-  const showSectionPrompt = sectionViews.includes(activeSection) && !['reference', 'code-library'].includes(activeSection);
+  const sectionViews = ['chats', 'projects', 'artifacts', 'customize', 'code', 'design', 'reference', 'code-library', 'research'];
+  const showSectionPrompt = sectionViews.includes(activeSection) && !['reference', 'code-library', 'research'].includes(activeSection);
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-[#f7f6f3] dark:bg-slate-950">
@@ -226,10 +311,19 @@ export default function DashboardPage({
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         theme={theme}
         onToggleTheme={onToggleTheme}
+        researchCount={activeCount}
+        memoryCount={memoryCount}
+        onOpenMemory={() => setMemoryPanelOpen(true)}
+        thinkingLogs={thinkingLogs}
+        onOpenThinkingHistory={() => setThinkingHistoryOpen(true)}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {sectionViews.includes(activeSection) ? (
+        {activeSection === 'research' ? (
+          <div className="flex-1 overflow-y-auto">
+            <ResearchPage user={user} onNavigate={onNavigate} onSignIn={onSignIn} />
+          </div>
+        ) : sectionViews.includes(activeSection) ? (
           <SectionPanel
             section={activeSection}
             sessions={sessions}
@@ -252,10 +346,24 @@ export default function DashboardPage({
               />
             )}
             {showChat && (
-              <ChatPanel session={activeSession} loading={loading} />
+              <ChatPanel
+                session={activeSession}
+                loading={loading}
+                researchProjectId={project?.id}
+                user={user}
+                memoryCount={memoryCount}
+                onOpenMemory={() => setMemoryPanelOpen(true)}
+              />
             )}
             {!showWelcome && !showChat && activeSection === 'chat' && (
-              <ChatPanel session={activeSession} loading={loading} />
+              <ChatPanel
+                session={activeSession}
+                loading={loading}
+                researchProjectId={project?.id}
+                user={user}
+                memoryCount={memoryCount}
+                onOpenMemory={() => setMemoryPanelOpen(true)}
+              />
             )}
             <div
               className={`shrink-0 px-4 pb-6 pt-2 ${
@@ -309,6 +417,10 @@ export default function DashboardPage({
                 onRemoveAttachment={handleRemoveAttachment}
                 uploading={uploading}
                 onVoiceTranscript={(text) => setInput((prev) => (prev ? `${prev} ${text}` : text))}
+                showResearchTemplates
+                onTemplateSelect={(prompt) => setInput(prompt)}
+                thinkingMode={thinkingMode}
+                onThinkingModeChange={setThinkingMode}
               />
             </div>
           </>
@@ -334,9 +446,25 @@ export default function DashboardPage({
               onRemoveAttachment={handleRemoveAttachment}
               uploading={uploading}
               onVoiceTranscript={(text) => setInput((prev) => (prev ? `${prev} ${text}` : text))}
+              showResearchTemplates
+              onTemplateSelect={(prompt) => setInput(prompt)}
+              thinkingMode={thinkingMode}
+              onThinkingModeChange={setThinkingMode}
             />
           </div>
         )}
+
+        <MemoryPanel
+          open={memoryPanelOpen}
+          onClose={() => setMemoryPanelOpen(false)}
+          user={user}
+          onRecall={handleRecallMemory}
+        />
+        <ThinkingHistoryPanel
+          open={thinkingHistoryOpen}
+          onClose={() => setThinkingHistoryOpen(false)}
+          user={user}
+        />
 
         <div ref={chatEndRef} />
       </div>

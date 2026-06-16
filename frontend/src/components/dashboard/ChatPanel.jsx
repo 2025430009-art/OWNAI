@@ -1,6 +1,14 @@
 import MessageBubble from '../MessageBubble.jsx';
+import { MemoryIndicator } from './MemoryPanel.jsx';
 
-export default function ChatPanel({ session, loading }) {
+export default function ChatPanel({
+  session,
+  loading,
+  researchProjectId,
+  user,
+  memoryCount,
+  onOpenMemory,
+}) {
   if (!session) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
@@ -11,10 +19,13 @@ export default function ChatPanel({ session, loading }) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-stone-200 px-6 py-3 dark:border-slate-800">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-200 px-6 py-3 dark:border-slate-800">
         <h2 className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
           {session.title}
         </h2>
+        {user && (
+          <MemoryIndicator count={memoryCount} onClick={onOpenMemory} user={user} />
+        )}
       </header>
       <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
         <div className="mx-auto max-w-3xl space-y-4">
@@ -29,6 +40,14 @@ export default function ChatPanel({ session, loading }) {
               role={msg.role}
               content={msg.content}
               isStreaming={msg.streaming}
+              researchProjectId={researchProjectId}
+              thinking={msg.thinking}
+              thinkingResult={msg.thinkingResult}
+              reasoningMode={msg.reasoningMode}
+              modeReason={msg.modeReason}
+              autoDetected={msg.autoDetected}
+              confidence={msg.confidence}
+              confidenceDetail={msg.confidenceDetail}
             />
           ))}
           {loading && session.messages.length > 0 && !session.messages.at(-1)?.streaming && (

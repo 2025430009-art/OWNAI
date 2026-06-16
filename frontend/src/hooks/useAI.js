@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { generateText, chatWithAttachments, queryRag } from '../api/client.js';
+import { generateText, chatWithAttachments, queryRag, thinkMessage } from '../api/client.js';
+import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
 import { streamPromptResponse } from '../utils/promptEngine.js';
 import { buildChatMessages, resolveHistory } from '../utils/memory.js';
 import ownaiMemory from '../utils/ownaiMemory.js';
 import { detectTask } from '../utils/modelRouter.js';
+import { apiModeFromUiId, shouldUseThinkEndpoint } from '../constants/thinkingModes.js';
 import {
   detectAIMode,
   AI_MODES,
@@ -22,32 +24,15 @@ async function consumeTokenStream(tokenStream, onToken) {
   return accumulated;
 }
 
-async function streamFromBackendSse(response, onToken) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let accumulated = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
-    for (const line of chunk.split('\n')) {
-      if (!line.startsWith('data: ')) continue;
-      const data = line.slice(6);
-      if (data === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.token) {
-          accumulated += parsed.token;
-          onToken?.(accumulated, parsed.token);
-        }
-      } catch {
-        // skip malformed chunk
-      }
-    }
-  }
-  return accumulated;
+async function streamFromBackendSse(response, onToken, onThinking, onConfidence, onMeta, onThinkingResult) {
+  const result = await consumeThinkingSse(response, {
+    onText: (full) => onToken?.(full),
+    onThinking: (full) => onThinking?.(full),
+    onConfidence: (conf) => onConfidence?.(conf),
+    onMeta: (meta) => onMeta?.(meta),
+    onThinkingResult: (tr) => onThinkingResult?.(tr),
+  });
+  return result;
 }
 
 /**
@@ -75,6 +60,10 @@ export default function useAI() {
     prompt,
     history = [],
     onToken,
+    onThinking,
+    onConfidence,
+    onMeta,
+    onThinkingResult,
     temperature = 0.7,
     max_tokens = 512,
     model_key,
@@ -82,6 +71,7 @@ export default function useAI() {
     attachmentIds = [],
     sessionId,
     useRag = true,
+    thinkingModeUi = 'auto',
   }) => {
     let activeMode = mode;
     if (!modeReady) {
@@ -120,11 +110,16 @@ export default function useAI() {
     }
     setActiveModel(modelLabel);
 
-    const persistMemory = (response) => {
+    const persistMemory = (response, streamMeta = {}) => {
       ownaiMemory.remember('user', prompt);
       ownaiMemory.remember('assistant', response);
       setMemoryFacts(ownaiMemory.getFacts());
-      return { content: response, model: modelLabel, mode: task.mode };
+      return {
+        content: response,
+        model: modelLabel,
+        mode: task.mode,
+        ...streamMeta,
+      };
     };
 
     try {
@@ -140,6 +135,9 @@ export default function useAI() {
 
       const backendUp = await canReachBackend();
       if (backendUp) {
+        const useThink = shouldUseThinkEndpoint(thinkingModeUi, attachmentIds.length > 0);
+        const apiMode = apiModeFromUiId(thinkingModeUi);
+
         const response = attachmentIds.length
           ? await chatWithAttachments({
               prompt,
@@ -151,19 +149,48 @@ export default function useAI() {
               algorithm_id,
               stream: true,
             })
-          : await generateText({
-              prompt,
-              messages: resolvedHistory,
-              max_tokens,
-              temperature,
-              model_key,
-              algorithm_id,
-              stream: true,
-              use_rag: useRag,
-            });
+          : useThink
+            ? await thinkMessage({
+                message: prompt,
+                mode: apiMode,
+                sessionId,
+                context: {
+                  score_confidence: true,
+                },
+                stream: true,
+                use_extended_thinking: apiMode === 'extended',
+              })
+            : await generateText({
+                prompt,
+                messages: resolvedHistory,
+                max_tokens,
+                temperature,
+                model_key,
+                algorithm_id,
+                stream: true,
+                use_rag: useRag,
+                enable_thinking: true,
+                reasoning_mode: 'direct',
+              });
 
-        const result = await streamFromBackendSse(response, onToken);
-        return persistMemory(result);
+        const streamed = await streamFromBackendSse(
+          response,
+          onToken,
+          onThinking,
+          onConfidence,
+          onMeta,
+          onThinkingResult,
+        );
+        return persistMemory(streamed.text || '', {
+          thinking: streamed.thinking,
+          confidence: streamed.confidence,
+          confidenceDetail: streamed.confidence?.detail,
+          meta: streamed.meta,
+          thinkingResult: streamed.thinkingResult,
+          reasoningMode: streamed.meta?.reasoning_mode,
+          modeReason: streamed.meta?.mode_reason,
+          autoDetected: streamed.meta?.auto_detected,
+        });
       }
 
       if (attachmentIds.length) {

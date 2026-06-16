@@ -1,11 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import MessageBubble from './MessageBubble.jsx';
 import ModelSelector from './ModelSelector.jsx';
+import ThinkingModeSelector from './dashboard/ThinkingModeSelector.jsx';
+import MemoryPanel, { MemoryIndicator } from './dashboard/MemoryPanel.jsx';
+import ThinkingHistoryPanel from './dashboard/ThinkingHistoryPanel.jsx';
 import useStreamingChat from '../hooks/useStreamingChat.js';
+import useResearchProject from '../hooks/useResearchProject.js';
+import ResearchTemplatesMenu from './ResearchTemplatesMenu.jsx';
 import { getSessionContext } from '../utils/memory.js';
 import ownaiMemory from '../utils/ownaiMemory.js';
 import { VoiceInput, VoiceOutput, isVoiceSupported } from '../utils/voice.js';
 import { detectAIMode, getModeLabel } from '../utils/apiConfig.js';
+import { listMemories } from '../api/client.js';
 
 const DEFAULT_MODELS = [
   { key: 'default', name: 'Llama 3.2 1B Instruct Q4', src: 'LLAMA_3_2_1B_INST_Q4_0' },
@@ -21,7 +27,8 @@ function ThinkingDots() {
   );
 }
 
-export default function ChatInterface({ models = DEFAULT_MODELS }) {
+export default function ChatInterface({ models = DEFAULT_MODELS, user }) {
+  const { project, activeCount } = useResearchProject();
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Hello! I\'m **OWNAI v2**. How can I help you today?' },
   ]);
@@ -32,6 +39,13 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
   const [maxTokens, setMaxTokens] = useState(512);
   const [listening, setListening] = useState(false);
   const [platformMode, setPlatformMode] = useState('');
+  const [thinkingMode, setThinkingMode] = useState(
+    () => localStorage.getItem('ownai-thinking-mode') || 'auto',
+  );
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
+  const [thinkingHistoryOpen, setThinkingHistoryOpen] = useState(false);
+  const [memoryCount, setMemoryCount] = useState(null);
+  const [chatSessionId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef(null);
   const voiceInputRef = useRef(null);
   const voiceOutRef = useRef(new VoiceOutput());
@@ -48,6 +62,17 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
   useEffect(() => {
     detectAIMode().then((m) => setPlatformMode(getModeLabel(m)));
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('ownai-thinking-mode', thinkingMode);
+  }, [thinkingMode]);
+
+  useEffect(() => {
+    if (!user) return;
+    listMemories()
+      .then((data) => setMemoryCount((data.memories || []).length))
+      .catch(() => setMemoryCount(null));
+  }, [user, loading]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -87,7 +112,14 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
     setLoading(true);
     setMessages((prev) => {
       const base = regenerate ? prev.slice(0, -1) : prev;
-      return [...base, { role: 'assistant', content: '', streaming: true, mode: activeMode, model: activeModel }];
+      return [...base, {
+        role: 'assistant',
+        content: '',
+        thinking: '',
+        streaming: true,
+        mode: activeMode,
+        model: activeModel,
+      }];
     });
 
     try {
@@ -97,6 +129,8 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
         max_tokens: maxTokens,
         temperature,
         model_key: selectedModel,
+        thinkingModeUi: thinkingMode,
+        sessionId: chatSessionId,
         onToken: (full) => {
           setMessages((prev) => {
             const updated = [...prev];
@@ -107,6 +141,47 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
               content: full,
               streaming: true,
             };
+            return updated;
+          });
+        },
+        onThinking: (thinking) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            updated[updated.length - 1] = { ...last, thinking, streaming: true };
+            return updated;
+          });
+        },
+        onMeta: (meta) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            updated[updated.length - 1] = {
+              ...last,
+              reasoningMode: meta.reasoning_mode ?? last.reasoningMode,
+              modeReason: meta.mode_reason ?? last.modeReason,
+              autoDetected: meta.auto_detected ?? last.autoDetected,
+            };
+            return updated;
+          });
+        },
+        onConfidence: (confidence) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            updated[updated.length - 1] = {
+              ...last,
+              confidence,
+              confidenceDetail: confidence?.detail,
+            };
+            return updated;
+          });
+        },
+        onThinkingResult: (thinkingResult) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            updated[updated.length - 1] = { ...last, thinkingResult, streaming: true };
             return updated;
           });
         },
@@ -121,6 +196,13 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
         updated[updated.length - 1] = {
           role: 'assistant',
           content,
+          thinking: (result?.thinking ?? updated[updated.length - 1]?.thinking) || '',
+          confidence: result?.confidence ?? updated[updated.length - 1]?.confidence,
+          confidenceDetail: result?.confidenceDetail ?? updated[updated.length - 1]?.confidenceDetail,
+          thinkingResult: result?.thinkingResult ?? updated[updated.length - 1]?.thinkingResult,
+          reasoningMode: result?.reasoningMode ?? updated[updated.length - 1]?.reasoningMode,
+          modeReason: result?.modeReason ?? updated[updated.length - 1]?.modeReason,
+          autoDetected: result?.autoDetected ?? updated[updated.length - 1]?.autoDetected,
           mode,
           model,
         };
@@ -134,7 +216,7 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
     } finally {
       setLoading(false);
     }
-  }, [loading, messages, sendMessage, maxTokens, temperature, selectedModel, activeMode, activeModel]);
+  }, [loading, messages, sendMessage, maxTokens, temperature, selectedModel, activeMode, activeModel, thinkingMode, chatSessionId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -165,6 +247,9 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {user && (
+            <MemoryIndicator count={memoryCount} onClick={() => setMemoryPanelOpen(true)} user={user} />
+          )}
           {activeMode && (
             <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-300">
               {activeMode}
@@ -226,6 +311,14 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
                 isStreaming={msg.streaming}
                 mode={msg.mode}
                 model={msg.model}
+                researchProjectId={user ? project?.id : null}
+                thinking={msg.thinking}
+                thinkingResult={msg.thinkingResult}
+                reasoningMode={msg.reasoningMode}
+                modeReason={msg.modeReason}
+                autoDetected={msg.autoDetected}
+                confidence={msg.confidence}
+                confidenceDetail={msg.confidenceDetail}
                 onSpeak={msg.role === 'assistant' && !msg.streaming
                   ? () => voiceOutRef.current.speak(msg.content)
                   : undefined}
@@ -243,6 +336,23 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
           </div>
 
           <form onSubmit={handleSubmit} className="border-t border-stone-200 p-4 dark:border-slate-700">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <ResearchTemplatesMenu
+                disabled={loading}
+                onSelect={(prompt) => setInput(prompt)}
+              />
+              <ThinkingModeSelector
+                value={thinkingMode}
+                onChange={setThinkingMode}
+                disabled={loading}
+                compact
+              />
+              {activeCount > 0 && (
+                <span className="text-[11px] text-violet-600 dark:text-violet-400">
+                  {activeCount} active research project{activeCount === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
             <div className="flex gap-2 sm:gap-3">
               <button
                 type="button"
@@ -290,6 +400,21 @@ export default function ChatInterface({ models = DEFAULT_MODELS }) {
           </form>
         </div>
       </div>
+
+      <MemoryPanel
+        open={memoryPanelOpen}
+        onClose={() => setMemoryPanelOpen(false)}
+        user={user}
+        onRecall={() => {
+          setMemoryPanelOpen(false);
+          runSend('What do you remember about me?');
+        }}
+      />
+      <ThinkingHistoryPanel
+        open={thinkingHistoryOpen}
+        onClose={() => setThinkingHistoryOpen(false)}
+        user={user}
+      />
     </div>
   );
 }

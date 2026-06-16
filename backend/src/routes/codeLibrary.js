@@ -60,7 +60,7 @@ router.post('/', inferenceAuth, validate(createCodeEntrySchema), handleLibrary(a
  *     summary: List all code library entries
  *     tags: [Code Library]
  */
-router.get('/', handleLibrary(async (req) => {
+router.get('/', inferenceAuth, handleLibrary(async (req) => {
   const filters = parseFilters(req.query);
   const entries = await listCodeEntries(filters);
   return { entries, count: entries.length };

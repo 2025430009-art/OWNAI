@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, optionalAuth } from '../middleware/auth.js';
 import { modelManager } from '../services/modelManager.js';
 
 const router = Router();
@@ -11,7 +11,7 @@ const router = Router();
  *     summary: List loaded models in cache
  *     tags: [Models]
  */
-router.get('/', (_req, res) => {
+router.get('/', optionalAuth, (_req, res) => {
   res.json({
     success: true,
     models: modelManager.getCacheStatus(),

@@ -1,6 +1,8 @@
 import { useRef, useState, useCallback } from 'react';
 import { AttachIcon, MicIcon, SendIcon } from './DashboardIcons.jsx';
 import { VoiceInput, isVoiceSupported } from '../../utils/voice.js';
+import ResearchTemplatesMenu from '../ResearchTemplatesMenu.jsx';
+import ThinkingModeSelector from './ThinkingModeSelector.jsx';
 
 const ACCEPTED_TYPES = [
   '.txt', '.md', '.json', '.csv', '.js', '.jsx', '.ts', '.tsx',
@@ -23,6 +25,10 @@ export default function PromptInput({
   uploading = false,
   disabled = false,
   onVoiceTranscript,
+  onTemplateSelect,
+  showResearchTemplates = false,
+  thinkingMode = 'auto',
+  onThinkingModeChange,
 }) {
   const fileInputRef = useRef(null);
   const [listening, setListening] = useState(false);
@@ -105,7 +111,20 @@ export default function PromptInput({
           disabled={loading || uploading || disabled}
           className="w-full resize-none bg-transparent px-4 pt-4 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
         />
+        <div className="flex items-center justify-end gap-2 px-3 pb-1">
+          <ThinkingModeSelector
+            value={thinkingMode}
+            onChange={onThinkingModeChange}
+            disabled={loading || uploading || disabled}
+          />
+        </div>
         <div className="flex items-center gap-2 px-3 pb-3">
+          {showResearchTemplates && (
+            <ResearchTemplatesMenu
+              disabled={loading || uploading || disabled}
+              onSelect={onTemplateSelect}
+            />
+          )}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}

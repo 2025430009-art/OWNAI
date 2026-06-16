@@ -1,0 +1,135 @@
+% VG-HLEBAM-VVC — Composite error bound (IEEEtran-compatible fragment)
+% Assumptions: Nangate 45nm, 16-bit signed residuals, 32-bit accumulator, VTM 10.0 AI anchor
+
+\documentclass[journal]{IEEEtran}
+\usepackage{amsmath,amssymb,amsthm}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+
+\begin{document}
+
+\section{Composite Error Bound for Variance-Gated Hybrid LOA--ETA with BAM}
+
+\subsection{Signal Model}
+Let $\mathbf{R}\in\mathbb{Z}^{N\times N}$ denote a transform-unit (TU) residual block after prediction.
+The one-dimensional inverse MTS output along row/column index $i$ is
+\begin{equation}
+  y_i = \sum_{j=0}^{N-1} T_{ij}\, r_j,
+  \label{eq:exact_mac}
+\end{equation}
+where $T_{ij}$ are fixed transform kernel coefficients and $r_j$ are residual samples.
+
+\subsection{Local Variance Statistic}
+\begin{definition}[TU residual variance]
+\begin{equation}
+  \mu_R = \frac{1}{N^2}\sum_{u,v} r_{uv}, \qquad
+  \sigma_R^2 = \frac{1}{N^2}\sum_{u,v}\bigl(r_{uv}-\mu_R\bigr)^2.
+  \label{eq:variance}
+\end{equation}
+\end{definition}
+
+\subsection{Adaptive LOA Depth and Mode Selection}
+Imprecise lower-part length:
+\begin{equation}
+  k(\sigma_R^2) = k_{\min} + \left\lfloor (k_{\max}-k_{\min})
+  \left(1-\frac{\sigma_R^2}{\sigma_{\max}^2}\right)^{\!\gamma} \right\rfloor.
+  \label{eq:k_adapt}
+\end{equation}
+Per-step LOA worst-case magnitude error (unsigned bound on imprecise segment):
+\begin{equation}
+  \Delta_{\mathrm{LOA}}(k) = 2^k - 1.
+  \label{eq:dloa}
+\end{equation}
+ETA truncation error with imprecise width $k_{\mathrm{ETA}}$:
+\begin{equation}
+  \Delta_{\mathrm{ETA}} = 2^{k_{\mathrm{ETA}}} - 1.
+  \label{eq:deta}
+\end{equation}
+Mode function:
+\begin{equation}
+  \mathcal{M}(\sigma_R^2)=
+  \begin{cases}
+    \mathrm{LOA}, & \sigma_R^2 \le \theta \;\wedge\; \Delta_{\mathrm{LOA}}(k(\sigma_R^2)) \le \Delta_{\mathrm{ETA}},\\
+    \mathrm{ETA}, & \text{otherwise}.
+  \end{cases}
+  \label{eq:mode}
+\end{equation}
+
+\subsection{BAM Multiplier Error Model}
+Let $\hat{p}= \mathrm{BAM}_{V,H}(a,b)$ approximate the product $p=ab$.
+Following normalized mean error distance (NMED) characterization~\cite{venkatesan2021}:
+\begin{equation}
+  |ab - \hat{p}| \le \epsilon_m |ab|_{\max}, \quad \epsilon_m \in \{\epsilon_{\mathrm{aggr}},\epsilon_{\mathrm{safe}}\},
+  \label{eq:bam}
+\end{equation}
+with $(V,H)$ selected by the same variance gate as~\eqref{eq:mode}.
+
+\subsection{Main Result}
+\begin{theorem}[Composite MAC-tree error bound]
+\label{thm:composite}
+For $M=N$ multiply-accumulate stages implementing~\eqref{eq:exact_mac} with BAM multipliers
+and $\mathcal{M}(\sigma_R^2)$-selected adders, the reconstructed sample error satisfies
+\begin{equation}
+  \boxed{
+  |y_i - \hat{y}_i| \le
+  M\,\Delta_{\mathrm{add}}(\sigma_R^2)
+  + \|T_i\|_1\,\epsilon_m(\sigma_R^2)\,\|r\|_\infty
+  }
+  \label{eq:main_bound}
+\end{equation}
+where $\Delta_{\mathrm{add}} = \Delta_{\mathrm{LOA}}(k)$ if $\mathcal{M}=\mathrm{LOA}$ and
+$\Delta_{\mathrm{add}}=\Delta_{\mathrm{ETA}}$ otherwise, and $\|T_i\|_1=\sum_j|T_{ij}|$.
+\end{theorem}
+
+\begin{proof}
+\textbf{Step 1 (multiplier error).}
+Define partial sums $S_j = \sum_{\ell=0}^{j-1} T_{i\ell} r_\ell$ with $S_0=0$.
+Exact recurrence: $S_{j+1}=S_j + T_{ij} r_j$.
+Approximate recurrence uses $\hat{m}_j = \mathrm{BAM}(T_{ij}, r_j)$:
+\begin{equation}
+  \hat{S}_{j+1} = \hat{S}_j \oplus \hat{m}_j,
+\end{equation}
+where $\oplus$ denotes approximate addition (LOA or ETA).
+
+From~\eqref{eq:bam}, $|T_{ij}r_j - \hat{m}_j| \le \epsilon_m |T_{ij}|\,\|r\|_\infty$.
+Summing over $j=0,\ldots,M-1$:
+\begin{equation}
+  \sum_j |T_{ij}r_j - \hat{m}_j| \le \epsilon_m \|r\|_\infty \sum_j |T_{ij}| = \epsilon_m \|T_i\|_1 \|r\|_\infty.
+  \label{eq:mult_sum}
+\end{equation}
+
+\textbf{Step 2 (accumulator error).}
+Each approximate addition introduces at most $\Delta_{\mathrm{add}}$ error in the worst case
+(LOA imprecise segment cannot exceed $2^k-1$ per~\eqref{eq:dloa}; ETA bounded by~\eqref{eq:deta}).
+Over $M$ stages:
+\begin{equation}
+  \Bigl|\sum_j T_{ij}r_j - \sum_j \hat{m}_j\Bigr| \le M\,\Delta_{\mathrm{add}} + \text{RHS of~\eqref{eq:mult_sum}},
+\end{equation}
+by triangle inequality on telescoping partial-sum differences. Combining yields~\eqref{eq:main_bound}.
+\end{proof}
+
+\subsection{Expected BD-Rate Impact}
+Let $p_h = \Pr[\sigma_R^2 > \theta]$ over TU residuals (estimated from JVET statistics).
+Partition TUs into low-variance ($\mathcal{L}$) and high-variance ($\mathcal{H}$) sets:
+\begin{equation}
+  \Delta\mathrm{BD\text{-}rate} \approx
+  (1-p_h)\,\delta_{\mathcal{L}} + p_h\,\delta_{\mathcal{H}},
+  \label{eq:bdrate_mix}
+\end{equation}
+where $\delta_{\mathcal{L}}$ uses aggressive BAM + LOA and $\delta_{\mathcal{H}}$ uses safe BAM + ETA.
+Compared to fixed LOA+BAM with $\delta_0 = 0.31\%$~\cite{porto2019}, VG-HLEBAM reduces
+$\delta_{\mathcal{H}}$ while allowing $\delta_{\mathcal{L}} < \delta_0$, yielding
+$\Delta\mathrm{BD\text{-}rate} \le 0.18\%$ when $p_h \approx 0.40$ and
+$\delta_{\mathcal{L}}=0.12\%$, $\delta_{\mathcal{H}}=0.22\%$ (see \texttt{bdrate\_sweep.py}).
+
+\begin{thebibliography}{1}
+\bibitem{venkatesan2021}
+M.~Venkatesan and S.~Senthilkumar, ``Approximate array multipliers,''
+\textit{Electronics}, vol.~10, no.~5, 2021.
+\bibitem{porto2019}
+R.~Porto \textit{et al.}, ``Power-efficient approximate SAD architecture with LOA imprecise adders,''
+\textit{Proc. IEEE LASCAS}, 2019.
+\end{thebibliography}
+
+\end{document}

@@ -12,10 +12,14 @@ import {
   SearchIcon,
   PanelIcon,
   MoreIcon,
+  BeakerIcon,
 } from './DashboardIcons.jsx';
+import { MemoryIndicator } from './MemoryPanel.jsx';
+import { ThinkingHistorySidebar } from './ThinkingHistoryPanel.jsx';
 
 const NAV_MAIN = [
   { id: 'chats', label: 'Chats', icon: ChatIcon },
+  { id: 'research', label: 'Research', icon: BeakerIcon },
   { id: 'reference', label: 'OWN AI Reference', icon: BookIcon },
   { id: 'code-library', label: 'Code Library', icon: LibraryIcon },
   { id: 'projects', label: 'Projects', icon: FolderIcon },
@@ -28,7 +32,7 @@ const NAV_PRODUCTS = [
   { id: 'design', label: 'Design', icon: PaletteIcon },
 ];
 
-function NavButton({ item, active, onClick }) {
+function NavButton({ item, active, onClick, badge }) {
   const Icon = item.icon;
   return (
     <button
@@ -42,6 +46,11 @@ function NavButton({ item, active, onClick }) {
     >
       <Icon />
       <span className="truncate">{item.label}</span>
+      {badge > 0 && (
+        <span className="ml-auto rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -60,6 +69,11 @@ export default function DashboardSidebar({
   onToggleCollapse,
   theme,
   onToggleTheme,
+  researchCount = 0,
+  memoryCount,
+  onOpenMemory,
+  thinkingLogs = [],
+  onOpenThinkingHistory,
 }) {
   const displayName = user?.email?.split('@')[0] || 'Guest';
   const planLabel = user ? 'Signed in' : 'Public access';
@@ -127,9 +141,33 @@ export default function DashboardSidebar({
             item={item}
             active={activeSection === item.id}
             onClick={onSectionChange}
+            badge={item.id === 'research' ? researchCount : 0}
           />
         ))}
       </nav>
+
+      {!collapsed && (
+        <div className="mt-4 px-2">
+          <div className="mb-2 flex items-center justify-between px-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Memory
+            </p>
+            {user && (
+              <MemoryIndicator count={memoryCount} onClick={onOpenMemory} user={user} />
+            )}
+          </div>
+          {user && memoryCount === 0 && (
+            <p className="px-3 py-1 text-xs text-slate-400">No memories yet</p>
+          )}
+        </div>
+      )}
+
+      {!collapsed && thinkingLogs.length > 0 && (
+        <ThinkingHistorySidebar
+          logs={thinkingLogs}
+          onOpenPanel={onOpenThinkingHistory}
+        />
+      )}
 
       {!collapsed && (
         <div className="mt-5 px-4">

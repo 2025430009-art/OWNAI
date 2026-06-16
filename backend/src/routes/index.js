@@ -11,6 +11,8 @@ import aiResearchRouter from './aiResearchRoutes.js';
 import ownaiQaRouter from './ownaiQa.js';
 import codeLibraryRouter from './codeLibrary.js';
 import ragRouter from './rag.js';
+import researchRouter from './research.js';
+import thinkingRouter from './thinking.js';
 
 const router = Router();
 
@@ -34,5 +36,7 @@ router.use('/ai', aiResearchRouter);
 router.use('/ownai-qa', ownaiQaRouter);
 router.use('/code-library', codeLibraryRouter);
 router.use('/rag', ragRouter);
+router.use('/research', researchRouter);
+router.use('/think', thinkingRouter);
 
 export default router;

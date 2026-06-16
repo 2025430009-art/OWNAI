@@ -3,15 +3,15 @@ import { ingestDocument, queryDocuments, vectorStore } from './vectorStore.js';
 import { OWNAI_SYSTEM_PROMPT } from '../config/personality.js';
 import { buildConversationHistory } from '../utils/conversationHistory.js';
 
-export async function ingestFile(filePath, originalName) {
+export async function ingestFile(filePath, originalName, namespace = null) {
   const { text, filename } = await loadDocument(filePath, originalName);
   const chunks = chunkText(text, 500);
   if (!chunks.length) return 0;
-  return ingestDocument(filename, chunks);
+  return ingestDocument(filename, chunks, namespace);
 }
 
-export async function buildRagContext(question, topK = 3) {
-  const context = await queryDocuments(question, topK);
+export async function buildRagContext(question, topK = 3, namespace = null) {
+  const context = await queryDocuments(question, topK, namespace);
   if (!context) return null;
   return context;
 }
@@ -30,8 +30,8 @@ export function buildRagSystemPrompt() {
 When document context is provided, prioritize it over general knowledge. Cite the source document when relevant.`;
 }
 
-export async function ragStatus() {
-  return vectorStore.status();
+export async function ragStatus(namespace = null) {
+  return vectorStore.status(namespace);
 }
 
 export { queryDocuments, ingestDocument };

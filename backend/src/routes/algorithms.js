@@ -1,9 +1,11 @@
 import { Router } from 'express';
+import { inferenceAuth } from '../middleware/auth.js';
+import { computeRateLimiter } from '../middleware/rateLimiter.js';
 import { listAlgorithms, listAIEngines, applyAlgorithm } from '../services/algorithmService.js';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
+router.get('/', inferenceAuth, (_req, res) => {
   res.json({
     success: true,
     algorithms: listAlgorithms().map((a) => ({
@@ -23,7 +25,7 @@ router.get('/engines', (_req, res) => {
   res.json({ success: true, engines: listAIEngines() });
 });
 
-router.post('/preview', (req, res) => {
+router.post('/preview', inferenceAuth, computeRateLimiter, (req, res) => {
   const { prompt, algorithm_id: algorithmId } = req.body || {};
   if (!prompt?.trim()) {
     return res.status(400).json({ error: 'prompt is required' });

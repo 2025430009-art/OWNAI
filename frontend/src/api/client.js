@@ -46,23 +46,42 @@ async function parseJsonResponse(response) {
   }
 }
 
-function getToken() {
-  return localStorage.getItem('ownai_token');
+function apiFetch(path, options = {}) {
+  return fetch(apiUrl(path), {
+    credentials: 'include',
+    ...options,
+  });
 }
 
-function authHeaders() {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-export async function generateText({ prompt, messages, max_tokens, temperature, model_key, algorithm_id, stream, use_rag }) {
-  const response = await fetch(apiUrl('/api/v1/generate'), {
+export async function generateText({
+  prompt,
+  messages,
+  max_tokens,
+  temperature,
+  model_key,
+  algorithm_id,
+  stream,
+  use_rag,
+  reasoning_mode,
+  enable_thinking,
+}) {
+  const response = await apiFetch('/api/v1/generate', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
     },
-    body: JSON.stringify({ prompt, messages, max_tokens, temperature, model_key, algorithm_id, stream, use_rag }),
+    body: JSON.stringify({
+      prompt,
+      messages,
+      max_tokens,
+      temperature,
+      model_key,
+      algorithm_id,
+      stream: stream !== false,
+      use_rag,
+      reasoning_mode,
+      enable_thinking,
+    }),
   });
 
   if (!response.ok) {
@@ -75,11 +94,10 @@ export async function generateText({ prompt, messages, max_tokens, temperature, 
 }
 
 export async function queryRag(question, top_k = 3) {
-  const response = await fetch(apiUrl('/api/v1/rag/query'), {
+  const response = await apiFetch('/api/v1/rag/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
     },
     body: JSON.stringify({ question, top_k }),
   });
@@ -94,9 +112,8 @@ export async function ingestRagDocument(file) {
   requireBackend();
   const form = new FormData();
   form.append('file', file);
-  const response = await fetch(apiUrl('/api/v1/rag/ingest'), {
+  const response = await apiFetch('/api/v1/rag/ingest', {
     method: 'POST',
-    headers: authHeaders(),
     body: form,
   });
   if (!response.ok) {
@@ -107,9 +124,7 @@ export async function ingestRagDocument(file) {
 }
 
 export async function getRagStatus() {
-  const response = await fetch(apiUrl('/api/v1/rag/status'), {
-    headers: authHeaders(),
-  });
+  const response = await apiFetch('/api/v1/rag/status');
   if (!response.ok) {
     const error = await parseJsonResponse(response).catch(() => ({}));
     throwApiError(response, error);
@@ -121,7 +136,7 @@ export async function signup(email, password) {
   if (!hasBackendConfigured()) {
     throw new Error(SIGNIN_REQUIRES_BACKEND_MSG);
   }
-  const response = await fetch(apiUrl('/api/v1/auth/signup'), {
+  const response = await apiFetch('/api/v1/auth/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -135,7 +150,7 @@ export async function login(email, password) {
   if (!hasBackendConfigured()) {
     throw new Error(SIGNIN_REQUIRES_BACKEND_MSG);
   }
-  const response = await fetch(apiUrl('/api/v1/auth/login'), {
+  const response = await apiFetch('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -145,11 +160,18 @@ export async function login(email, password) {
   return data;
 }
 
+export async function logout() {
+  if (!hasBackendConfigured()) return { success: true };
+  const response = await apiFetch('/api/v1/auth/logout', { method: 'POST' });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Logout failed');
+  return data;
+}
+
 export async function getMe() {
   if (!hasBackendConfigured()) return { user: null };
-  const response = await fetch(apiUrl('/api/v1/auth/me'), {
-    headers: authHeaders(),
-  });
+  const response = await apiFetch('/api/v1/auth/me');
+  if (response.status === 401) return { user: null };
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to fetch profile');
   return data;
@@ -157,7 +179,7 @@ export async function getMe() {
 
 export async function listModels() {
   if (!hasBackendConfigured()) return { available: [] };
-  const response = await fetch(apiUrl('/api/v1/models'));
+  const response = await apiFetch('/api/v1/models');
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to list models');
   return data;
@@ -172,18 +194,17 @@ export async function healthCheck() {
 
 export async function listCapabilities() {
   if (!hasBackendConfigured()) return { capabilities: [] };
-  const response = await fetch(apiUrl('/api/v1/capabilities'));
+  const response = await apiFetch('/api/v1/capabilities');
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to list capabilities');
   return data;
 }
 
 export async function executeCapability(slug, payload) {
-  const response = await fetch(apiUrl(`/api/v1/capabilities/${slug}/execute`), {
+  const response = await apiFetch(`/api/v1/capabilities/${slug}/execute`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
     },
     body: JSON.stringify(payload),
   });
@@ -196,7 +217,7 @@ export async function executeCapability(slug, payload) {
 
 export async function listCodeGenerators() {
   if (!hasBackendConfigured()) return { generators: [] };
-  const response = await fetch(apiUrl('/api/v1/code-generators'));
+  const response = await apiFetch('/api/v1/code-generators');
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to list code generators');
   return data;
@@ -210,11 +231,10 @@ export async function generateCode({
   model_key,
   stream,
 }) {
-  const response = await fetch(apiUrl(`/api/v1/code-generators/${generatorId}/generate`), {
+  const response = await apiFetch(`/api/v1/code-generators/${generatorId}/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
     },
     body: JSON.stringify({ prompt, max_tokens, temperature, model_key, stream }),
   });
@@ -236,9 +256,8 @@ export async function uploadAttachments(files, sessionId) {
   }
   if (sessionId) formData.append('session_id', sessionId);
 
-  const response = await fetch(apiUrl('/api/v1/attachments'), {
+  const response = await apiFetch('/api/v1/attachments', {
     method: 'POST',
-    headers: authHeaders(),
     body: formData,
   });
 
@@ -248,9 +267,8 @@ export async function uploadAttachments(files, sessionId) {
 }
 
 export async function deleteAttachment(id) {
-  const response = await fetch(apiUrl(`/api/v1/attachments/${id}`), {
+  const response = await apiFetch(`/api/v1/attachments/${id}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Delete failed');
@@ -259,7 +277,7 @@ export async function deleteAttachment(id) {
 
 export async function listAIEngines() {
   if (!hasBackendConfigured()) return { engines: [] };
-  const response = await fetch(apiUrl('/api/v1/algorithms/engines'));
+  const response = await apiFetch('/api/v1/algorithms/engines');
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to list AI engines');
   return data;
@@ -267,7 +285,7 @@ export async function listAIEngines() {
 
 export async function listAlgorithms() {
   if (!hasBackendConfigured()) return { algorithms: [] };
-  const response = await fetch(apiUrl('/api/v1/algorithms'));
+  const response = await apiFetch('/api/v1/algorithms');
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to list algorithms');
   return data;
@@ -300,9 +318,8 @@ export async function chatWithAttachments({
     formData.append('files', file);
   }
 
-  const response = await fetch(apiUrl('/api/v1/attachments/chat'), {
+  const response = await apiFetch('/api/v1/attachments/chat', {
     method: 'POST',
-    headers: authHeaders(),
     body: formData,
   });
 
@@ -316,11 +333,10 @@ export async function chatWithAttachments({
 }
 
 export async function saveOwnAIQa({ question, answer, topic, source }) {
-  const response = await fetch(apiUrl('/api/v1/ownai-qa'), {
+  const response = await apiFetch('/api/v1/ownai-qa', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
     },
     body: JSON.stringify({ question, answer, topic, source }),
   });
@@ -333,23 +349,22 @@ export async function listOwnAIQa({ topic } = {}) {
   const params = new URLSearchParams();
   if (topic) params.set('topic', topic);
   const qs = params.toString();
-  const response = await fetch(apiUrl(`/api/v1/ownai-qa${qs ? `?${qs}` : ''}`));
+  const response = await apiFetch(`/api/v1/ownai-qa${qs ? `?${qs}` : ''}`);
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to load reference');
   return data;
 }
 
 export async function searchOwnAIQa(q) {
-  const response = await fetch(apiUrl(`/api/v1/ownai-qa/search?q=${encodeURIComponent(q)}`));
+  const response = await apiFetch(`/api/v1/ownai-qa/search?q=${encodeURIComponent(q)}`);
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Search failed');
   return data;
 }
 
 export async function deleteOwnAIQa(id) {
-  const response = await fetch(apiUrl(`/api/v1/ownai-qa/${id}`), {
+  const response = await apiFetch(`/api/v1/ownai-qa/${id}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Delete failed');
@@ -367,9 +382,9 @@ function codeLibraryQuery(params = {}) {
 }
 
 export async function saveCodeLibraryEntry(entry) {
-  const response = await fetch(apiUrl('/api/v1/code-library'), {
+  const response = await apiFetch('/api/v1/code-library', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry),
   });
   const data = await parseJsonResponse(response);
@@ -378,23 +393,23 @@ export async function saveCodeLibraryEntry(entry) {
 }
 
 export async function listCodeLibrary(params = {}) {
-  const response = await fetch(apiUrl(`/api/v1/code-library${codeLibraryQuery(params)}`));
+  const response = await apiFetch(`/api/v1/code-library${codeLibraryQuery(params)}`);
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Failed to load code library');
   return data;
 }
 
 export async function getCodeLibraryEntry(id) {
-  const response = await fetch(apiUrl(`/api/v1/code-library/${id}`));
+  const response = await apiFetch(`/api/v1/code-library/${id}`);
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Entry not found');
   return data;
 }
 
 export async function updateCodeLibraryEntry(id, entry) {
-  const response = await fetch(apiUrl(`/api/v1/code-library/${id}`), {
+  const response = await apiFetch(`/api/v1/code-library/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(entry),
   });
   const data = await parseJsonResponse(response);
@@ -403,9 +418,8 @@ export async function updateCodeLibraryEntry(id, entry) {
 }
 
 export async function deleteCodeLibraryEntry(id) {
-  const response = await fetch(apiUrl(`/api/v1/code-library/${id}`), {
+  const response = await apiFetch(`/api/v1/code-library/${id}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   });
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Delete failed');
@@ -417,15 +431,218 @@ export async function searchCodeLibrary(q, params = {}) {
   if (params.lang) qs.set('lang', params.lang);
   if (params.type) qs.set('type', params.type);
   if (params.sort) qs.set('sort', params.sort);
-  const response = await fetch(apiUrl(`/api/v1/code-library/search?${qs}`));
+  const response = await apiFetch(`/api/v1/code-library/search?${qs}`);
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Search failed');
   return data;
 }
 
 export async function filterCodeLibrary(params = {}) {
-  const response = await fetch(apiUrl(`/api/v1/code-library/filter${codeLibraryQuery(params)}`));
+  const response = await apiFetch(`/api/v1/code-library/filter${codeLibraryQuery(params)}`);
   const data = await parseJsonResponse(response);
   if (!response.ok) throw new Error(data.error || 'Filter failed');
+  return data;
+}
+
+// --- AI Thinking Engine ---
+
+export async function thinkMessage({
+  message,
+  mode = 'auto',
+  sessionId,
+  context = {},
+  tools = [],
+  stream = true,
+  use_extended_thinking = false,
+}) {
+  requireBackend();
+  const response = await apiFetch('/api/v1/think', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      mode,
+      session_id: sessionId,
+      context,
+      tools,
+      stream: stream !== false,
+      use_extended_thinking,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await parseJsonResponse(response).catch(() => ({}));
+    throwApiError(response, error);
+  }
+
+  if (stream) return response;
+  return parseJsonResponse(response);
+}
+
+export async function detectThinkingMode(message, context = {}) {
+  requireBackend();
+  const response = await apiFetch('/api/v1/think/detect-mode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, context }),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Mode detection failed');
+  return data;
+}
+
+export async function compareThinkingModes(message, modes, { sessionId, context = {} } = {}) {
+  requireBackend();
+  const response = await apiFetch('/api/v1/think/compare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      modes,
+      session_id: sessionId,
+      context,
+    }),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Compare failed');
+  return data;
+}
+
+export async function listMemories(type) {
+  requireBackend();
+  const qs = type ? `?type=${encodeURIComponent(type)}` : '';
+  const response = await apiFetch(`/api/v1/think/memory${qs}`);
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to load memories');
+  return data;
+}
+
+export async function saveMemoryEntry(entry) {
+  requireBackend();
+  const response = await apiFetch('/api/v1/think/memory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to save memory');
+  return data;
+}
+
+export async function forgetMemoryEntry(id) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/think/memory/${id}`, { method: 'DELETE' });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to forget memory');
+  return data;
+}
+
+export async function listThinkingLogs() {
+  requireBackend();
+  const response = await apiFetch('/api/v1/think/logs');
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to load thinking logs');
+  return data;
+}
+
+export async function getThinkingLog(id) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/think/logs/${id}`);
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to load thinking log');
+  return data;
+}
+
+// --- Research paper system ---
+
+export async function listResearchProjects() {
+  requireBackend();
+  const response = await apiFetch('/api/v1/research/projects');
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to list research projects');
+  return data;
+}
+
+export async function createResearchProject(payload) {
+  requireBackend();
+  const response = await apiFetch('/api/v1/research/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to create research project');
+  return data;
+}
+
+export async function getResearchProject(projectId) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/research/projects/${projectId}`);
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to load research project');
+  return data;
+}
+
+export async function createResearchPaper(projectId, paper) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/research/projects/${projectId}/papers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(paper),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to save paper');
+  return data;
+}
+
+export async function createResearchDerivation(projectId, derivation) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/research/projects/${projectId}/derivations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(derivation),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to save derivation');
+  return data;
+}
+
+export async function createResearchSimulation(projectId, payload) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/research/projects/${projectId}/simulations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to create simulation run');
+  return data;
+}
+
+export async function updateSimulationResults(simulationId, payload) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/research/simulations/${simulationId}/results`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to update simulation results');
+  return data;
+}
+
+export async function listResearchPapers(projectId) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/research/projects/${projectId}/papers`);
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to list papers');
+  return data;
+}
+
+export async function listResearchSimulations(projectId) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/research/projects/${projectId}/simulations`);
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to list simulations');
   return data;
 }

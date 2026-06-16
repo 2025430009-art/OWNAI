@@ -1,5 +1,9 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { config, assertSecureConfig } from './config/index.js';
@@ -11,6 +15,9 @@ import openaiRouter from './routes/openai.js';
 import { initDatabase } from './db/index.js';
 import { modelManager } from './services/modelManager.js';
 import { resolveListenPort } from '../scripts/ensure-port.js';
+
+const __dirnameServer = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirnameServer, '../..');
 
 const swaggerSpec = swaggerJsdoc({
   definition: {
@@ -39,6 +46,22 @@ const swaggerSpec = swaggerJsdoc({
 
 const app = express();
 
+function swaggerBasicAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Basic ')) {
+    const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+    const separator = decoded.indexOf(':');
+    const user = separator >= 0 ? decoded.slice(0, separator) : decoded;
+    const password = separator >= 0 ? decoded.slice(separator + 1) : '';
+    if (user === process.env.SWAGGER_USER && password === process.env.SWAGGER_PASSWORD) {
+      return next();
+    }
+  }
+
+  res.setHeader('WWW-Authenticate', 'Basic realm="OWN AI API Docs"');
+  return res.status(401).send('Authentication required');
+}
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin || config.corsOrigin.includes(origin)) {
@@ -49,17 +72,29 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
 app.use(apiRateLimiter);
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  customSiteTitle: 'OWN AI API Docs',
-  swaggerOptions: {
-    persistAuthorization: true,
-    displayRequestDuration: true,
-  },
-}));
-app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
+// Swagger UI documents every endpoint and is an attack-surface map — keep it off in production
+// unless explicitly enabled (SWAGGER_ENABLED=true) with HTTP Basic Auth credentials.
+if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') {
+  const swaggerUiSetup = swaggerUi.setup(swaggerSpec, {
+    customSiteTitle: 'OWN AI API Docs',
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+    },
+  });
+
+  if (process.env.NODE_ENV === 'production') {
+    app.use('/api-docs', swaggerBasicAuth, swaggerUi.serve, swaggerUiSetup);
+    app.get('/api-docs.json', swaggerBasicAuth, (_req, res) => res.json(swaggerSpec));
+  } else {
+    app.use('/api-docs', swaggerUi.serve, swaggerUiSetup);
+    app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
+  }
+}
 
 app.get('/', (_req, res) => {
   res.json({
@@ -100,9 +135,17 @@ async function start() {
 
   const listenPort = await resolveListenPort(config.port);
 
+  try {
+    await fs.writeFile(path.join(PROJECT_ROOT, '.backend-port'), String(listenPort), 'utf8');
+  } catch {
+    // non-fatal — vite proxy may use PORT env instead
+  }
+
   const server = app.listen(listenPort, () => {
     logger.info(`OWN AI API running on http://localhost:${listenPort}`);
-    logger.info(`Swagger docs at http://localhost:${listenPort}/api-docs`);
+    if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') {
+      logger.info(`Swagger docs at http://localhost:${listenPort}/api-docs`);
+    }
     logger.info(`OpenAI-compatible API at http://localhost:${listenPort}/v1`);
     if (listenPort !== config.port) {
       logger.warn(`Port ${config.port} was busy — using ${listenPort} instead`);

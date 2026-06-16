@@ -1,5 +1,6 @@
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'research', label: 'Research' },
   { id: 'install', label: 'Install' },
   { id: 'guide', label: 'User Guide' },
   { id: 'api', label: 'API' },
@@ -8,7 +9,7 @@ const NAV_ITEMS = [
   { id: 'community', label: 'Community' },
 ];
 
-export default function Header({ activeTab, onNavigate, user, onLogout, apiStatus, theme, onToggleTheme }) {
+export default function Header({ activeTab, onNavigate, user, onLogout, apiStatus, theme, onToggleTheme, researchCount = 0 }) {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -38,7 +39,14 @@ export default function Header({ activeTab, onNavigate, user, onLogout, apiStatu
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
               }`}
             >
-              {item.label}
+              <span className="inline-flex items-center gap-1.5">
+                {item.label}
+                {item.id === 'research' && researchCount > 0 && (
+                  <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                    {researchCount}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </nav>
@@ -93,6 +101,7 @@ export default function Header({ activeTab, onNavigate, user, onLogout, apiStatu
             }`}
           >
             {item.label}
+            {item.id === 'research' && researchCount > 0 ? ` (${researchCount})` : ''}
           </button>
         ))}
       </nav>

@@ -1,0 +1,10 @@
+{
+  "vtm_version": "10.0",
+  "vtm_config": "AI",
+  "technology_nm": 45,
+  "residual_bit_width": 16,
+  "baseline_bdrate_percent": 0.31,
+  "best_theta": 64,
+  "best_bdrate_percent": 0.22,
+  "improvement_pp": 0.09
+}

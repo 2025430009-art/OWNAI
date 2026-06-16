@@ -136,9 +136,29 @@ router.post('/chat', inferenceAuth, inferenceRateLimiter, upload.array('files', 
 
     const sessionId = getRequestSessionId(req);
     const files = req.files || [];
-    const attachmentIds = req.body.attachment_ids
-      ? JSON.parse(req.body.attachment_ids)
-      : [];
+    let attachmentIds = [];
+    if (req.body.attachment_ids) {
+      const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      let parsed;
+      try {
+        parsed = JSON.parse(req.body.attachment_ids);
+      } catch {
+        return res.status(400).json({ error: 'Invalid attachment_ids format' });
+      }
+      if (!Array.isArray(parsed)) {
+        return res.status(400).json({ error: 'attachment_ids must be an array' });
+      }
+      if (parsed.length > 20) {
+        return res.status(400).json({ error: 'Too many attachment_ids' });
+      }
+      for (const id of parsed) {
+        if (typeof id !== 'string' || !UUID_V4_REGEX.test(id)) {
+          logger.warn('Invalid attachment ID in attachment_ids', { id });
+          return res.status(400).json({ error: 'Invalid attachment ID in attachment_ids' });
+        }
+      }
+      attachmentIds = parsed;
+    }
 
     const uploaded = [];
     for (const file of files) {

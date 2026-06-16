@@ -48,7 +48,7 @@ router.post('/', inferenceAuth, validate(createQaSchema), handleQa(async (req) =
  *     summary: List saved Q&A pairs (optional q, topic filters)
  *     tags: [OWN AI Reference]
  */
-router.get('/', handleQa(async (req) => {
+router.get('/', inferenceAuth, handleQa(async (req) => {
   const { q, topic } = req.query;
   const entries = await listQaEntries({ q, topic });
   return { entries, count: entries.length };

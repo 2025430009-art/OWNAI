@@ -36,7 +36,6 @@ export default function AuthForm({ onAuth }) {
     try {
       const fn = mode === 'login' ? login : signup;
       const data = await fn(email, password);
-      localStorage.setItem('ownai_token', data.token);
       onAuth(data.user);
     } catch (err) {
       setError(err.message);

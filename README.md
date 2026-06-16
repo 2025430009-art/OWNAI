@@ -111,6 +111,17 @@ npm run ownai -- model-ops:status
 - Vulkan GPU drivers
 - PostgreSQL (optional, for auth)
 
+## Pre-deploy checklist
+
+Before exposing the backend to the internet, verify every item below:
+
+- Rotate `DATABASE_URL` credentials
+- Set `JWT_SECRET` to 64+ random characters
+- Set `NODE_ENV=production`
+- Set `REQUIRE_API_AUTH=true`
+- Set `CORS_ORIGIN` to your frontend URL only
+- Set `SWAGGER_ENABLED=false` or guard with `SWAGGER_USER` / `SWAGGER_PASSWORD`
+
 ## License
 
 Apache 2.0

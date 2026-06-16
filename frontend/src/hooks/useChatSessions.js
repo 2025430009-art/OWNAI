@@ -94,14 +94,30 @@ export default function useChatSessions() {
     });
   }, []);
 
-  const replaceLastAssistant = useCallback((sessionId, content) => {
+  const patchLastAssistant = useCallback((sessionId, patch) => {
     setSessions((prev) => {
       const next = prev.map((s) => {
         if (s.id !== sessionId) return s;
         const messages = [...s.messages];
         const last = messages[messages.length - 1];
         if (last?.role === 'assistant') {
-          messages[messages.length - 1] = { role: 'assistant', content };
+          messages[messages.length - 1] = { ...last, ...patch, role: 'assistant' };
+        }
+        return { ...s, messages, updatedAt: Date.now() };
+      });
+      saveSessions(next);
+      return next;
+    });
+  }, []);
+
+  const replaceLastAssistant = useCallback((sessionId, content, extras = {}) => {
+    setSessions((prev) => {
+      const next = prev.map((s) => {
+        if (s.id !== sessionId) return s;
+        const messages = [...s.messages];
+        const last = messages[messages.length - 1];
+        if (last?.role === 'assistant') {
+          messages[messages.length - 1] = { role: 'assistant', content, ...extras };
         }
         return { ...s, messages, updatedAt: Date.now() };
       });
@@ -135,6 +151,7 @@ export default function useChatSessions() {
     deleteSession,
     appendMessage,
     updateLastMessage,
+    patchLastAssistant,
     replaceLastAssistant,
     removeStreamingPlaceholder,
   };

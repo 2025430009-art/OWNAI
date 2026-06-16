@@ -172,6 +172,15 @@ export function BookIcon() {
   );
 }
 
+export function BeakerIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className={iconClass}>
+      <path d="M8 3h4M9 3v4l-4 9a1 1 0 0 0 .9 1.5h8.2a1 1 0 0 0 .9-1.5L11 7V3" strokeLinejoin="round" />
+      <path d="M7 13h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function MoreIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">

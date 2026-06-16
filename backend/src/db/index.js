@@ -1,6 +1,9 @@
 import pg from 'pg';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { runResearchMigration, verifyResearchTables } from './migrations/runResearchMigration.js';
+import { runThinkingMigration, verifyThinkingTables } from './migrations/runThinkingMigration.js';
+import { runMemoryMigration, verifyMemoryTables } from './migrations/runMemoryMigration.js';
 
 const { Pool } = pg;
 
@@ -75,6 +78,28 @@ export async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_code_library_language ON code_library(language);
       CREATE INDEX IF NOT EXISTS idx_code_library_category ON code_library(category);
     `);
+
+    const research = await runResearchMigration(client);
+    if (research.ok) {
+      logger.info('Research tables ready', { tables: research.tables });
+    } else {
+      logger.warn('Research migration incomplete', { missing: research.missing });
+    }
+
+    const thinking = await runThinkingMigration(client);
+    if (thinking.ok) {
+      logger.info('Thinking logs table ready', { tables: thinking.tables });
+    } else {
+      logger.warn('Thinking migration incomplete', { missing: thinking.missing });
+    }
+
+    const memory = await runMemoryMigration(client);
+    if (memory.ok) {
+      logger.info('Memory tables ready', { tables: memory.tables });
+    } else {
+      logger.warn('Memory migration incomplete', { missing: memory.missing });
+    }
+
     dbAvailable = true;
     logger.info('Database initialized');
   } finally {

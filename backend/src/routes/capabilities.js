@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CAPABILITIES, getCapability } from '../data/capabilities.js';
 import { capabilityService } from '../services/capabilityService.js';
-import { inferenceAuth } from '../middleware/auth.js';
+import { inferenceAuth, optionalAuth } from '../middleware/auth.js';
 import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 
@@ -14,7 +14,7 @@ const router = Router();
  *     summary: List all AI capabilities
  *     tags: [Capabilities]
  */
-router.get('/', (_req, res) => {
+router.get('/', optionalAuth, (_req, res) => {
   res.json({
     success: true,
     count: CAPABILITIES.length,

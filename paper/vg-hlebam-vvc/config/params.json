@@ -1,0 +1,22 @@
+{
+  "technology_nm": 45,
+  "residual_bit_width": 16,
+  "accumulator_bit_width": 32,
+  "vtm_version": "10.0",
+  "vtm_config": "AI",
+  "transform_sizes": [4, 8, 16, 32, 64],
+  "k_min": 2,
+  "k_max": 6,
+  "k_eta": 4,
+  "gamma": 1.0,
+  "sigma2_max": 65536.0,
+  "variance_threshold_theta": 512.0,
+  "bam_aggressive": { "V": 8, "H": 16 },
+  "bam_safe": { "V": 4, "H": 8 },
+  "bam_nmed_aggressive": 0.045,
+  "bam_nmed_safe": 0.012,
+  "bdrate_low_variance": 0.12,
+  "bdrate_high_variance": 0.22,
+  "baseline_bdrate_percent": 0.31,
+  "cross_validate_tolerance_percent": 0.3
+}
