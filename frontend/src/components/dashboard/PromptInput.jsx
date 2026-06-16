@@ -24,6 +24,8 @@ export default function PromptInput({
   onRemoveAttachment,
   uploading = false,
   disabled = false,
+  attachDisabled = false,
+  attachHint = 'Attach file',
   onVoiceTranscript,
   onTemplateSelect,
   showResearchTemplates = false,
@@ -128,9 +130,10 @@ export default function PromptInput({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={loading || uploading || disabled}
-            className="rounded-lg p-2 text-slate-400 hover:bg-stone-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800"
+            disabled={loading || uploading || disabled || attachDisabled}
+            className="rounded-lg p-2 text-slate-400 hover:bg-stone-100 hover:text-slate-600 disabled:opacity-40 dark:hover:bg-slate-800"
             aria-label="Attach file"
+            title={attachDisabled ? attachHint : 'Attach file'}
           >
             <AttachIcon />
           </button>

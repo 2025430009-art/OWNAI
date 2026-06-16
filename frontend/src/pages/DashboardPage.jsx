@@ -10,6 +10,7 @@ import useResearchProject from '../hooks/useResearchProject.js';
 import { uploadAttachments, deleteAttachment, listAIEngines, ingestRagDocument, listMemories, listThinkingLogs } from '../api/client.js';
 import useAI from '../hooks/useAI.js';
 import BackendConnectPanel from '../components/dashboard/BackendConnectPanel.jsx';
+import { canReachBackend } from '../utils/apiConfig.js';
 import MemoryPanel from '../components/dashboard/MemoryPanel.jsx';
 import ThinkingHistoryPanel from '../components/dashboard/ThinkingHistoryPanel.jsx';
 import { getSessionContext } from '../utils/memory.js';
@@ -52,6 +53,7 @@ export default function DashboardPage({
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [backendReady, setBackendReady] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(
     () => localStorage.getItem('ownai-thinking-mode') || 'auto',
   );
@@ -61,7 +63,7 @@ export default function DashboardPage({
   const [thinkingLogs, setThinkingLogs] = useState([]);
   const chatEndRef = useRef(null);
   const saveToReferenceRef = useRef(null);
-  const { send: sendAI, friendlyAIError, modeLabel, taskMode, activeModel, memoryFacts, clearMemory } = useAI();
+  const { send: sendAI, friendlyAIError, taskMode, activeModel, memoryFacts, clearMemory } = useAI();
 
   const userName = user?.email?.split('@')[0];
 
@@ -94,6 +96,10 @@ export default function DashboardPage({
   useEffect(() => {
     refreshMemoryAndLogs();
   }, [refreshMemoryAndLogs]);
+
+  useEffect(() => {
+    canReachBackend().then(setBackendReady);
+  }, [uploadError, loading]);
 
   useEffect(() => {
     if (activeSection === 'chat' && activeSession?.messages.length) {
@@ -220,8 +226,15 @@ export default function DashboardPage({
   ]);
 
   const handleAttach = async (files) => {
-    setUploading(true);
     setUploadError('');
+    const reachable = await canReachBackend();
+    setBackendReady(reachable);
+    if (!reachable) {
+      setUploadError('Connect your OWNAI backend above to attach PDFs and other files.');
+      return;
+    }
+
+    setUploading(true);
     try {
       const sessionId = activeId || undefined;
       const data = await uploadAttachments(files, sessionId);
@@ -370,39 +383,14 @@ export default function DashboardPage({
                 showWelcome ? 'absolute bottom-0 left-0 right-0' : ''
               }`}
             >
-              <BackendConnectPanel />
-              <div className="mx-auto mb-2 flex max-w-2xl flex-wrap gap-2 px-1">
-                {modeLabel && (
-                  <span className="rounded-full border border-stone-200 bg-white px-2.5 py-0.5 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900">
-                    {modeLabel}
-                  </span>
-                )}
-                {taskMode && (
-                  <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-[11px] text-teal-800 dark:border-teal-800 dark:bg-teal-950/40">
-                    {taskMode}
-                  </span>
-                )}
-                {activeModel && (
-                  <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800">
-                    {activeModel}
-                  </span>
-                )}
-                {(memoryFacts.name || memoryFacts.role) && (
-                  <span className="truncate rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30">
-                    Remembers: {[memoryFacts.name, memoryFacts.role].filter(Boolean).join(' · ')}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={clearMemory}
-                  className="rounded-full border border-red-200 px-2.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50 dark:border-red-900"
-                >
-                  Clear memory
-                </button>
-              </div>
-              {uploadError && (
-                <p className="mx-auto mb-2 max-w-2xl text-sm text-red-500">{uploadError}</p>
-              )}
+              <BackendConnectPanel
+                taskMode={taskMode}
+                activeModel={activeModel}
+                memoryFacts={memoryFacts}
+                onClearMemory={clearMemory}
+                notice={uploadError || null}
+                onConnected={() => canReachBackend().then(setBackendReady)}
+              />
               <PromptInput
                 value={input}
                 onChange={setInput}
@@ -421,6 +409,8 @@ export default function DashboardPage({
                 onTemplateSelect={(prompt) => setInput(prompt)}
                 thinkingMode={thinkingMode}
                 onThinkingModeChange={setThinkingMode}
+                attachDisabled={!backendReady}
+                attachHint="Connect backend to attach files"
               />
             </div>
           </>
@@ -428,10 +418,14 @@ export default function DashboardPage({
 
         {showSectionPrompt && (
           <div className="shrink-0 border-t border-stone-200 bg-[#f7f6f3]/90 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-            <BackendConnectPanel />
-            {uploadError && (
-              <p className="mx-auto mb-2 max-w-2xl text-sm text-red-500">{uploadError}</p>
-            )}
+            <BackendConnectPanel
+              taskMode={taskMode}
+              activeModel={activeModel}
+              memoryFacts={memoryFacts}
+              onClearMemory={clearMemory}
+              notice={uploadError || null}
+              onConnected={() => canReachBackend().then(setBackendReady)}
+            />
             <PromptInput
               value={input}
               onChange={setInput}
@@ -450,6 +444,8 @@ export default function DashboardPage({
               onTemplateSelect={(prompt) => setInput(prompt)}
               thinkingMode={thinkingMode}
               onThinkingModeChange={setThinkingMode}
+              attachDisabled={!backendReady}
+              attachHint="Connect backend to attach files"
             />
           </div>
         )}
