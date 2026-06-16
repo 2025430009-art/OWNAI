@@ -1,22 +1,15 @@
-FROM python:3.10-slim
+FROM node:22-alpine
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install only what backend workspace needs first (better layer cache).
+COPY package.json ./
+COPY backend/package.json ./backend/package.json
+RUN npm install --workspace=backend
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy backend source after dependencies.
+COPY backend ./backend
 
-# Copy the rest of the application
-COPY . .
+EXPOSE 3000
 
-# Expose the port
-EXPOSE 8080
-
-# Run the application
-CMD ["python", "trainers/pretrain.py"]
+CMD ["npm", "run", "start", "--workspace=backend"]
