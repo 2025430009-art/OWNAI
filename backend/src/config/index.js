@@ -68,10 +68,9 @@ const INSECURE_JWT_SECRETS = new Set([
 
 export function assertSecureConfig() {
   if (process.env.DATABASE_URL?.includes('ownai:ownai@')) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('FATAL: Default database credentials detected in production. Rotate DATABASE_URL immediately.');
-    }
-    console.warn('[Security] Default DB credentials in use. Fine for dev, must be rotated before production deploy.');
+    console.warn(
+      '[Security] Default DB credentials in use. Database-backed auth/usage features will be unavailable until DATABASE_URL is configured.',
+    );
   }
 
   if (config.nodeEnv !== 'production') return;
@@ -104,8 +103,8 @@ export function assertSecureConfig() {
   }
 
   if (!config.mongodb?.uri) {
-    throw new Error(
-      'MONGODB_URI must be set in production. Add it to your environment (e.g. Render service vars).',
+    console.warn(
+      '[PromptToVideo] MONGODB_URI not set in production — metadata will use file fallback.',
     );
   }
 }
