@@ -31,7 +31,7 @@ jobs:
       - name: Build frontend for GitHub Pages
         env:
           GITHUB_PAGES: 'true'
-          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ownai-backend.onrender.com' }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ownai-6pc9.onrender.com' }}
         run: npm run build --workspace=frontend
 
       - name: Setup Pages
