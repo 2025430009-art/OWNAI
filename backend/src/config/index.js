@@ -48,6 +48,16 @@ export const config = {
     apiKey: process.env.ANTHROPIC_API_KEY || null,
     thinkingBudgetTokens: parseInt(process.env.ANTHROPIC_THINKING_BUDGET || '8000', 10),
   },
+  promptToVideo: {
+    stabilityApiKey: process.env.STABILITY_API_KEY || null,
+    elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || null,
+    elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM',
+    replicateApiKey: process.env.REPLICATE_API_KEY || null,
+    mubertApiKey: process.env.MUBERT_API_KEY || null,
+  },
+  mongodb: {
+    uri: process.env.MONGODB_URI || null,
+  },
 };
 
 const INSECURE_JWT_SECRETS = new Set([
@@ -91,5 +101,11 @@ export function assertSecureConfig() {
         'SWAGGER_USER and SWAGGER_PASSWORD must be set when SWAGGER_ENABLED=true. Update your .env file.',
       );
     }
+  }
+
+  if (!config.mongodb?.uri) {
+    throw new Error(
+      'MONGODB_URI must be set in production. Add it to your environment (e.g. Render service vars).',
+    );
   }
 }

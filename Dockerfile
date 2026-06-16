@@ -1,23 +1,22 @@
-FROM node:22-bookworm
-
-RUN apt-get update && apt-get install -y \
-    vulkan-tools \
-    libvulkan1 \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY package*.json ./
-COPY backend/package*.json ./backend/
-RUN npm install --workspace=backend
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY backend ./backend
-COPY config ./config
-COPY models ./models
-COPY logs ./logs
-COPY .env.example .env
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /app/backend
-EXPOSE 3000
+# Copy the rest of the application
+COPY . .
 
-CMD ["node", "src/server.js"]
+# Expose the port
+EXPOSE 8080
+
+# Run the application
+CMD ["python", "trainers/pretrain.py"]

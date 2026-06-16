@@ -13,6 +13,7 @@ import {
   PanelIcon,
   MoreIcon,
   BeakerIcon,
+  VideoIcon,
 } from './DashboardIcons.jsx';
 import { MemoryIndicator } from './MemoryPanel.jsx';
 import { ThinkingHistorySidebar } from './ThinkingHistoryPanel.jsx';
@@ -31,6 +32,7 @@ const NAV_MAIN = [
 const NAV_PRODUCTS = [
   { id: 'code', label: 'Code', icon: CodeIcon },
   { id: 'design', label: 'Design', icon: PaletteIcon },
+  { id: 'prompt-to-video', label: 'PromptToVideo', icon: VideoIcon },
 ];
 
 function NavButton({ item, active, onClick, badge }) {

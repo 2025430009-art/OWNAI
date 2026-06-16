@@ -76,6 +76,15 @@ export function PaletteIcon() {
   );
 }
 
+export function VideoIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className={iconClass}>
+      <rect x="2.5" y="5" width="15" height="10" rx="2" />
+      <path d="M8.5 8.5l4 2.5-4 2.5V8.5z" className="fill-current stroke-none" />
+    </svg>
+  );
+}
+
 export function SearchIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" className="h-4 w-4">

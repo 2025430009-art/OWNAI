@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import CodeGeneratorPanel from './CodeGeneratorPanel.jsx';
+import PromptToVideoPanel from '../promptToVideo/PromptToVideoPanel.jsx';
 import OwnAIReferencePanel from './OwnAIReferencePanel.jsx';
 import CodeLibraryPanel from './CodeLibraryPanel.jsx';
 import { listAlgorithms } from '../../api/client.js';
@@ -286,12 +287,15 @@ export default function SectionPanel({
     design: {
       body: <ProductWorkspace type="design" onStartPrompt={onStartPrompt} />,
     },
+    'prompt-to-video': {
+      body: <PromptToVideoPanel />,
+    },
   };
 
   const view = content[section];
   if (!view) return null;
 
-  if (section === 'reference' || section === 'code-library') {
+  if (section === 'reference' || section === 'code-library' || section === 'prompt-to-video') {
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         {view.body}

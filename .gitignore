@@ -11,6 +11,11 @@ logs/*.log
 !logs/.gitkeep
 uploads/*
 !uploads/.gitkeep
+temp/*
+!temp/.gitkeep
+output/*
+!output/.gitkeep
+backend/data/prompt-to-video-jobs.json
 .backend-port
 models/*.gguf
 !models/.gitkeep

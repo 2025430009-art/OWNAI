@@ -646,3 +646,70 @@ export async function listResearchSimulations(projectId) {
   if (!response.ok) throw new Error(data.error || 'Failed to list simulations');
   return data;
 }
+
+// ── PromptToVideo AI ─────────────────────────────────────────────────────────
+
+export async function getPromptToVideoSteps() {
+  requireBackend();
+  const response = await apiFetch('/api/v1/prompt-to-video/steps');
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to load video steps');
+  return data;
+}
+
+export async function getTransformerArchitecture() {
+  requireBackend();
+  const response = await apiFetch('/api/v1/models/transformer-architecture');
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to load architecture');
+  return data;
+}
+
+export async function generatePromptToVideo({ prompt, stream = true, quality = '1080p', subtitle }) {
+  requireBackend();
+  const response = await apiFetch('/api/v1/prompt-to-video/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, stream, quality, subtitle }),
+  });
+
+  if (!response.ok) {
+    const error = await parseJsonResponse(response).catch(() => ({}));
+    throwApiError(response, error);
+  }
+
+  if (stream) return response;
+  return parseJsonResponse(response);
+}
+
+export async function listPromptToVideoJobs() {
+  requireBackend();
+  const response = await apiFetch('/api/v1/prompt-to-video/jobs');
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to list videos');
+  return data;
+}
+
+export async function getPromptToVideoJob(id) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/prompt-to-video/jobs/${id}`);
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to load video job');
+  return data;
+}
+
+export async function deletePromptToVideoJob(id) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/prompt-to-video/jobs/${id}`, { method: 'DELETE' });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to delete video');
+  return data;
+}
+
+export async function cancelPromptToVideoJob(id) {
+  requireBackend();
+  const response = await apiFetch(`/api/v1/prompt-to-video/jobs/${id}/cancel`, { method: 'POST' });
+  const data = await parseJsonResponse(response);
+  if (!response.ok) throw new Error(data.error || 'Failed to cancel generation');
+  return data;
+}

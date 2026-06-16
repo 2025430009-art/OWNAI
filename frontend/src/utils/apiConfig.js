@@ -122,6 +122,28 @@ export function healthUrl(base = getApiBase()) {
   return `${base}/api/v1/health`;
 }
 
+/**
+ * WebSocket origin for real-time streams (e.g. PromptToVideo progress).
+ * Uses Vite dev proxy (same host) when API base is relative.
+ */
+export function getWebSocketBase() {
+  const base = getApiBase();
+  if (base) return base.replace(/^http/, 'ws');
+  if (typeof window !== 'undefined' && hasBackendConfigured()) {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}`;
+  }
+  return '';
+}
+
+export function wsUrl(path, params = {}) {
+  const wsBase = getWebSocketBase();
+  if (!wsBase) return null;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const qs = new URLSearchParams(params).toString();
+  return `${wsBase}${normalizedPath}${qs ? `?${qs}` : ''}`;
+}
+
 export async function probeBackend(baseUrl = getApiBase()) {
   if (!baseUrl && !hasBackendConfigured()) {
     throw new Error(getBackendUnavailableMessage());

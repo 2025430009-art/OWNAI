@@ -4,6 +4,8 @@ import cookieParser from 'cookie-parser';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createServer } from 'http';
+import { WebSocketServer } from 'ws';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { config, assertSecureConfig } from './config/index.js';
@@ -13,8 +15,11 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import apiRouter from './routes/index.js';
 import openaiRouter from './routes/openai.js';
 import { initDatabase } from './db/index.js';
+import { initMongo, disconnectMongo } from './db/mongo.js';
 import { modelManager } from './services/modelManager.js';
 import { resolveListenPort } from '../scripts/ensure-port.js';
+import { attachPromptToVideoWs } from './services/promptToVideo/orchestrator.js';
+import { ensurePromptToVideoDirs } from './services/promptToVideo/videoJobStore.js';
 
 const __dirnameServer = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirnameServer, '../..');
@@ -133,6 +138,8 @@ async function start() {
     logger.warn('Database unavailable — auth/usage features disabled', { error: error.message });
   }
 
+  await initMongo().catch(() => {});
+
   const listenPort = await resolveListenPort(config.port);
 
   try {
@@ -141,7 +148,43 @@ async function start() {
     // non-fatal — vite proxy may use PORT env instead
   }
 
-  const server = app.listen(listenPort, () => {
+  const server = createServer(app);
+
+  const ptvWss = new WebSocketServer({ noServer: true });
+  attachPromptToVideoWs(ptvWss);
+
+  ptvWss.on('connection', (ws) => {
+    ws.send(JSON.stringify({ type: 'connected', jobId: ws.jobId || null }));
+
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === 'subscribe' && msg.jobId) {
+          ws.jobId = msg.jobId;
+          ws.send(JSON.stringify({ type: 'subscribed', jobId: msg.jobId }));
+        }
+      } catch {
+        // ignore invalid client messages
+      }
+    });
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url, `http://${request.headers.host}`);
+    if (url.pathname === '/api/v1/prompt-to-video/ws') {
+      ptvWss.handleUpgrade(request, socket, head, (ws) => {
+        const jobId = url.searchParams.get('jobId');
+        if (jobId) ws.jobId = jobId;
+        ptvWss.emit('connection', ws, request);
+      });
+      return;
+    }
+    socket.destroy();
+  });
+
+  await ensurePromptToVideoDirs().catch(() => {});
+
+  server.listen(listenPort, () => {
     logger.info(`OWN AI API running on http://localhost:${listenPort}`);
     if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') {
       logger.info(`Swagger docs at http://localhost:${listenPort}/api-docs`);
@@ -156,6 +199,7 @@ async function start() {
     logger.info(`${signal} received, shutting down`);
     server.close(async () => {
       await modelManager.unloadAll().catch(() => {});
+      await disconnectMongo().catch(() => {});
       process.exit(0);
     });
   };

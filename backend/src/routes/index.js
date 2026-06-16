@@ -13,6 +13,7 @@ import codeLibraryRouter from './codeLibrary.js';
 import ragRouter from './rag.js';
 import researchRouter from './research.js';
 import thinkingRouter from './thinking.js';
+import promptToVideoRouter from './promptToVideo.js';
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.use('/code-library', codeLibraryRouter);
 router.use('/rag', ragRouter);
 router.use('/research', researchRouter);
 router.use('/think', thinkingRouter);
+router.use('/prompt-to-video', promptToVideoRouter);
 
 export default router;

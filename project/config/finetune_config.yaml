@@ -1,0 +1,28 @@
+seed: 42
+output_dir: outputs/finetune
+checkpoint: outputs/pretrain/latest
+tokenizer_path: outputs/pretrain/latest/tokenizer.json
+resume_from_checkpoint: null
+run_name_prefix: gpt12l-ft
+wandb_project: gpt12l-finetune
+artifact_dir: outputs/finetune/artifacts
+training:
+  epochs: 3
+  batch_size: 32
+  learning_rate: 6.25e-5
+  warmup_ratio: 0.002
+  lr_schedule: linear_decay
+  classifier_dropout: 0.1
+  aux_lm_lambda: 0.5
+  early_stopping: true
+  log_with: tensorboard
+tasks:
+  - snli
+  - multinli
+  - qnli
+  - rte
+  - mrpc
+  - qqp
+  - stsb
+  - cola
+  - sst2
