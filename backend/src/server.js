@@ -102,6 +102,9 @@ if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'tr
 }
 
 app.get('/', (_req, res) => {
+  const frontendUrl = config.nodeEnv === 'production'
+    ? (config.corsOrigin.find((o) => o.includes('github.io')) || config.corsOrigin[0] || null)
+    : 'http://localhost:5176';
   res.json({
     success: true,
     name: 'OWN AI Platform API',
@@ -113,7 +116,10 @@ app.get('/', (_req, res) => {
       api: '/api/v1',
       openai: '/v1',
     },
-    hint: 'This is the API server. Open the React app at http://localhost:5173 (or your Vite dev port).',
+    frontend: frontendUrl,
+    hint: frontendUrl
+      ? `API is live. Open the web app at ${frontendUrl}`
+      : 'API is live. Connect your frontend to this origin.',
   });
 });
 
