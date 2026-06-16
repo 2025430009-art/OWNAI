@@ -71,11 +71,15 @@ export function inferenceAuth(req, res, next) {
 
   try {
     const user = authenticateRequest(req);
-    if (!user) {
-      return res.status(401).json({ error: 'Authentication required' });
+    if (user) {
+      req.user = user;
+      return next();
     }
-    req.user = user;
-    return next();
+    if (process.env.ALLOW_PUBLIC_INFERENCE === 'true') {
+      req.user = { id: 'public', email: 'guest@ownai', public: true };
+      return next();
+    }
+    return res.status(401).json({ error: 'Authentication required' });
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }

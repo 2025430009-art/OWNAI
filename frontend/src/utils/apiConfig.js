@@ -218,6 +218,9 @@ export function getModeLabel(mode) {
 /** User-friendly error — never expose raw HTTP codes */
 export function friendlyAIError(error) {
   const msg = error?.message || '';
+  if (/authentication required|401|invalid or expired token/i.test(msg)) {
+    return 'Backend connected but chat is blocked (auth). On Render set ALLOW_PUBLIC_INFERENCE=true and redeploy.';
+  }
   if (/405|404|502|503|failed to fetch|network/i.test(msg)) {
     return getBackendUnavailableMessage();
   }

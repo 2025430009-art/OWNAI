@@ -206,6 +206,11 @@ export default function useAI() {
       if (attachmentIds.length) {
         throw new Error('Could not process attachments. Connect the OWNAI backend.');
       }
+      const msg = error?.message || '';
+      const canUseOfflineFallback = /backend not connected|unreachable|timed out|failed to fetch|502|503|404|health check/i.test(msg);
+      if (!canUseOfflineFallback) {
+        throw new Error(friendlyAIError(error));
+      }
       try {
         setMode(AI_MODES.STATIC);
         const result = await consumeTokenStream(streamPromptResponse(prompt), onToken);

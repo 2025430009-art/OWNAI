@@ -15,6 +15,8 @@ services:
         value: 10000
       - key: REQUIRE_API_AUTH
         value: "true"
+      - key: ALLOW_PUBLIC_INFERENCE
+        value: "true"
       - key: CORS_ORIGIN
         value: "https://2025430009-art.github.io"
       - key: JWT_SECRET
