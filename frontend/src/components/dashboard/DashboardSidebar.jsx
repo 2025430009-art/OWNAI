@@ -16,6 +16,7 @@ import {
 } from './DashboardIcons.jsx';
 import { MemoryIndicator } from './MemoryPanel.jsx';
 import { ThinkingHistorySidebar } from './ThinkingHistoryPanel.jsx';
+import BackendConnectPanel from './BackendConnectPanel.jsx';
 
 const NAV_MAIN = [
   { id: 'chats', label: 'Chats', icon: ChatIcon },
@@ -74,6 +75,12 @@ export default function DashboardSidebar({
   onOpenMemory,
   thinkingLogs = [],
   onOpenThinkingHistory,
+  taskMode,
+  activeModel,
+  memoryFacts,
+  onClearMemory,
+  backendNotice,
+  onBackendConnected,
 }) {
   const displayName = user?.email?.split('@')[0] || 'Guest';
   const planLabel = user ? 'Signed in' : 'Public access';
@@ -133,6 +140,18 @@ export default function DashboardSidebar({
           {!collapsed && <span>New chat</span>}
         </button>
       </div>
+
+      {!collapsed && (
+        <BackendConnectPanel
+          variant="sidebar"
+          taskMode={taskMode}
+          activeModel={activeModel}
+          memoryFacts={memoryFacts}
+          onClearMemory={onClearMemory}
+          notice={backendNotice}
+          onConnected={onBackendConnected}
+        />
+      )}
 
       <nav className="flex flex-col gap-0.5 px-2">
         {NAV_MAIN.map((item) => (

@@ -9,7 +9,6 @@ import useChatSessions from '../hooks/useChatSessions.js';
 import useResearchProject from '../hooks/useResearchProject.js';
 import { uploadAttachments, deleteAttachment, listAIEngines, ingestRagDocument, listMemories, listThinkingLogs } from '../api/client.js';
 import useAI from '../hooks/useAI.js';
-import BackendConnectPanel from '../components/dashboard/BackendConnectPanel.jsx';
 import { canReachBackend } from '../utils/apiConfig.js';
 import MemoryPanel from '../components/dashboard/MemoryPanel.jsx';
 import ThinkingHistoryPanel from '../components/dashboard/ThinkingHistoryPanel.jsx';
@@ -329,6 +328,12 @@ export default function DashboardPage({
         onOpenMemory={() => setMemoryPanelOpen(true)}
         thinkingLogs={thinkingLogs}
         onOpenThinkingHistory={() => setThinkingHistoryOpen(true)}
+        taskMode={taskMode}
+        activeModel={activeModel}
+        memoryFacts={memoryFacts}
+        onClearMemory={clearMemory}
+        backendNotice={uploadError || null}
+        onBackendConnected={() => canReachBackend().then(setBackendReady)}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
@@ -383,14 +388,6 @@ export default function DashboardPage({
                 showWelcome ? 'absolute bottom-0 left-0 right-0' : ''
               }`}
             >
-              <BackendConnectPanel
-                taskMode={taskMode}
-                activeModel={activeModel}
-                memoryFacts={memoryFacts}
-                onClearMemory={clearMemory}
-                notice={uploadError || null}
-                onConnected={() => canReachBackend().then(setBackendReady)}
-              />
               <PromptInput
                 value={input}
                 onChange={setInput}
@@ -418,14 +415,6 @@ export default function DashboardPage({
 
         {showSectionPrompt && (
           <div className="shrink-0 border-t border-stone-200 bg-[#f7f6f3]/90 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-            <BackendConnectPanel
-              taskMode={taskMode}
-              activeModel={activeModel}
-              memoryFacts={memoryFacts}
-              onClearMemory={clearMemory}
-              notice={uploadError || null}
-              onConnected={() => canReachBackend().then(setBackendReady)}
-            />
             <PromptInput
               value={input}
               onChange={setInput}

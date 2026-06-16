@@ -26,6 +26,7 @@ function StatusDot({ tone = 'neutral' }) {
 export default function BackendConnectPanel({
   onConnected,
   compact = false,
+  variant = 'inline',
   taskMode,
   activeModel,
   memoryFacts,
@@ -92,6 +93,7 @@ export default function BackendConnectPanel({
 
   const showConnectForm = isStaticHosting() && !connected;
   const memoryLine = [memoryFacts?.name, memoryFacts?.role].filter(Boolean).join(' · ');
+  const isSidebar = variant === 'sidebar';
 
   if (compact) {
     return (
@@ -120,97 +122,139 @@ export default function BackendConnectPanel({
   }
 
   return (
-    <div className="mx-auto mb-3 max-w-2xl">
-      <div className="rounded-xl border border-stone-200/80 bg-white/90 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
+    <div className={isSidebar ? 'px-2 pb-2' : 'mx-auto mb-3 max-w-2xl'}>
+      <div className={`rounded-xl border border-stone-200/80 bg-white/90 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90 ${isSidebar ? 'overflow-hidden' : ''}`}>
+        {isSidebar && (
+          <p className="border-b border-stone-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-800">
+            Session
+          </p>
+        )}
         {/* Status row */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-stone-100 px-3 py-2.5 dark:border-slate-800">
+        <div className={`flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2.5 ${isSidebar ? '' : 'border-b border-stone-100 dark:border-slate-800'}`}>
           <div className="flex items-center gap-2">
             <StatusDot tone={dotTone} />
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+            <span className={`font-medium text-slate-700 dark:text-slate-200 ${isSidebar ? 'text-[11px] leading-tight' : 'text-xs'}`}>
               {modeLabel || 'Detecting…'}
             </span>
           </div>
 
-          {taskMode && (
+          {!isSidebar && taskMode && (
             <span className="rounded-full border border-teal-200/80 bg-teal-50 px-2 py-0.5 text-[10px] font-medium text-teal-800 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200">
               {taskMode}
             </span>
           )}
-          {activeModel && (
+          {!isSidebar && activeModel && (
             <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
               {activeModel}
             </span>
           )}
-          {memoryLine && (
+          {!isSidebar && memoryLine && (
             <span className="max-w-[12rem] truncate rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
               {memoryLine}
             </span>
           )}
 
-          <div className="ml-auto flex items-center gap-2">
-            {onClearMemory && (
-              <button
-                type="button"
-                onClick={onClearMemory}
-                className="text-[10px] text-slate-400 hover:text-red-600 dark:hover:text-red-400"
-              >
-                Clear memory
-              </button>
+          {!isSidebar && (
+            <div className="ml-auto flex items-center gap-2">
+              {onClearMemory && (
+                <button
+                  type="button"
+                  onClick={onClearMemory}
+                  className="text-[10px] text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                >
+                  Clear memory
+                </button>
+              )}
+              {connected && getApiBase() && (
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  className="text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  Disconnect
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {isSidebar && (taskMode || activeModel) && (
+          <div className="flex flex-wrap gap-1 border-b border-stone-100 px-3 py-2 dark:border-slate-800">
+            {taskMode && (
+              <span className="rounded-full border border-teal-200/80 bg-teal-50 px-2 py-0.5 text-[9px] font-medium text-teal-800 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200">
+                {taskMode}
+              </span>
             )}
-            {connected && getApiBase() && (
+            {activeModel && (
+              <span className="truncate rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[9px] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {activeModel}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Backend connect (GitHub Pages / no API) — always show URL field in sidebar when offline */}
+        {(showConnectForm || (isSidebar && !connected && !isStaticHosting())) && (
+          <div className="border-b border-stone-100 px-3 py-3 dark:border-slate-800">
+            {showConnectForm && (
+              <p className="mb-2 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                Offline chat works here. Connect API for PDFs, thinking modes &amp; sign-in.
+              </p>
+            )}
+            <form onSubmit={handleConnect} className="flex flex-col gap-2">
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder={isSidebar ? 'http://localhost:3002' : 'https://tunnel… or http://localhost:3002'}
+                className="w-full rounded-lg border border-stone-200 bg-stone-50/80 px-2.5 py-1.5 text-[11px] text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-100"
+              />
+              <button
+                type="submit"
+                disabled={status === 'checking'}
+                className="w-full rounded-lg bg-teal-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+              >
+                {status === 'checking' ? 'Connecting…' : 'Connect backend'}
+              </button>
+            </form>
+            {error && (
+              <p className="mt-2 text-[10px] text-red-600 dark:text-red-400">{error}</p>
+            )}
+          </div>
+        )}
+
+        {/* Connected backend URL */}
+        {connected && getApiBase() && (
+          <div className="border-b border-stone-100 px-3 py-2 dark:border-slate-800">
+            <p className="truncate text-[9px] text-slate-400">
+              API — <code className="text-slate-500">{getApiBase()}</code>
+            </p>
+            {isSidebar && (
               <button
                 type="button"
                 onClick={handleDisconnect}
-                className="text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-400"
+                className="mt-1 text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-400"
               >
                 Disconnect
               </button>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Backend connect (GitHub Pages / no API) */}
-        {showConnectForm && (
-          <div className="px-3 py-3">
-            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Chat works offline on this page. Connect your OWNAI API for{' '}
-              <span className="text-slate-600 dark:text-slate-300">PDF uploads</span>, thinking modes, and sign-in.
-            </p>
-            <form onSubmit={handleConnect} className="mt-2.5 flex flex-col gap-2 sm:flex-row">
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://your-tunnel.trycloudflare.com or http://localhost:3002"
-                className="min-w-0 flex-1 rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/30 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-100"
-              />
-              <button
-                type="submit"
-                disabled={status === 'checking'}
-                className="shrink-0 rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-700 disabled:opacity-60"
-              >
-                {status === 'checking' ? 'Connecting…' : 'Connect'}
+        {isSidebar && memoryLine && (
+          <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-2 dark:border-slate-800">
+            <span className="truncate text-[9px] text-amber-800 dark:text-amber-200">{memoryLine}</span>
+            {onClearMemory && (
+              <button type="button" onClick={onClearMemory} className="shrink-0 text-[9px] text-slate-400 hover:text-red-500">
+                Clear
               </button>
-            </form>
-            {error && (
-              <p className="mt-2 text-[11px] text-red-600 dark:text-red-400">{error}</p>
             )}
           </div>
         )}
 
-        {/* Connected backend URL (subtle) */}
-        {connected && getApiBase() && (
-          <div className="px-3 py-2">
-            <p className="truncate text-[10px] text-slate-400">
-              API — <code className="text-slate-500 dark:text-slate-400">{getApiBase()}</code>
-            </p>
-          </div>
-        )}
-
-        {/* Inline notice (upload errors, etc.) */}
         {notice && (
-          <div className="border-t border-amber-100 bg-amber-50/60 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/20">
-            <p className="text-[11px] text-amber-900 dark:text-amber-200">{notice}</p>
+          <div className="bg-amber-50/60 px-3 py-2 dark:bg-amber-950/20">
+            <p className="text-[10px] text-amber-900 dark:text-amber-200">{notice}</p>
           </div>
         )}
       </div>
