@@ -5,7 +5,13 @@ export const INTELLIGENCE_MODES = {
   CREATE: 'CREATE MODE',
 };
 
-const DEFAULT_MODEL = 'llama3.1:8b';
+export const OLLAMA_MODELS = {
+  CHAT: 'llama3.2:3b',
+  CODE: 'qwen2.5:7b',
+  FALLBACK: 'mistral:7b',
+};
+
+const DEFAULT_MODEL = OLLAMA_MODELS.CHAT;
 
 export const MODEL_ROUTER = {
   detectTask(message) {
@@ -21,7 +27,7 @@ export const MODEL_ROUTER = {
       || msg.includes('javascript')
       || msg.includes('python')
     ) {
-      return { model: 'qwen2.5:7b', mode: INTELLIGENCE_MODES.DEEP };
+      return { model: OLLAMA_MODELS.CODE, mode: INTELLIGENCE_MODES.DEEP, task: 'code' };
     }
 
     if (
@@ -32,7 +38,7 @@ export const MODEL_ROUTER = {
       || msg.includes('compare')
       || msg.includes('explain')
     ) {
-      return { model: 'deepseek-r1:7b', mode: INTELLIGENCE_MODES.THINK };
+      return { model: OLLAMA_MODELS.FALLBACK, mode: INTELLIGENCE_MODES.THINK, task: 'chat' };
     }
 
     if (
@@ -43,10 +49,10 @@ export const MODEL_ROUTER = {
       || msg.includes('draft')
       || msg.includes('poem')
     ) {
-      return { model: 'mistral', mode: INTELLIGENCE_MODES.CREATE };
+      return { model: OLLAMA_MODELS.FALLBACK, mode: INTELLIGENCE_MODES.CREATE, task: 'chat' };
     }
 
-    return { model: DEFAULT_MODEL, mode: INTELLIGENCE_MODES.FAST };
+    return { model: DEFAULT_MODEL, mode: INTELLIGENCE_MODES.FAST, task: 'chat' };
   },
 };
 

@@ -42,7 +42,7 @@ export function buildChatMessages({
 
   return [
     { role: 'system', content: OWNAI_SYSTEM_PROMPT },
-    ...turns.slice(-10),
+    ...turns.slice(-6),
   ];
 }
 

@@ -3,7 +3,6 @@ import { runThinkingGeneration } from './thinkingGenerationService.js';
 import { scoreResponseConfidence } from '../ai/refinementEngine.js';
 import {
   THINKING_MODES,
-  buildFallbackResponse,
   classifyThinkingFailure,
   buildFailureMessage,
   isGenericFallbackText,
@@ -328,26 +327,26 @@ export async function runHumanThinkPipeline({
     lastFailure = classifyThinkingFailure(error);
   }
 
-  const fallback = buildFallbackResponse(lastFailure);
+  const friendlyText = 'I had trouble reaching the AI engine. Please try again in a moment.';
   onEvent?.({
     type: 'error',
     code: lastFailure?.code || 'unknown',
-    message: buildFailureMessage(lastFailure),
+    message: friendlyText,
     detail: lastFailure?.message || null,
   });
 
   return {
-    final_answer: buildFailureMessage(lastFailure),
-    thinking_scratchpad: fallback.thinking,
+    final_answer: friendlyText,
+    thinking_scratchpad: '',
     parsed: null,
-    confidence: fallback.confidence.score,
+    confidence: 20,
     confidence_detail: {
-      overall: fallback.confidence.score,
-      should_caveat: true,
-      caveat_text: buildFailureMessage(lastFailure),
-      explanation: lastFailure?.message || fallback.confidence.reasoning,
+      overall: 20,
+      should_caveat: false,
+      caveat_text: '',
+      explanation: lastFailure?.message || null,
     },
-    raw_response: fallback.text,
+    raw_response: friendlyText,
     fallback: true,
     pipeline_meta: {
       failed: true,

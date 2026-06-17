@@ -43,7 +43,7 @@ export default function useAI() {
   const [mode, setMode] = useState(AI_MODES.STATIC);
   const [modeReady, setModeReady] = useState(false);
   const [taskMode, setTaskMode] = useState('FAST MODE');
-  const [activeModel, setActiveModel] = useState('llama3.1:8b');
+  const [activeModel, setActiveModel] = useState('llama3.2:3b');
   const [memoryFacts, setMemoryFacts] = useState(() => ownaiMemory.getFacts());
 
   const refreshMode = useCallback(async () => {

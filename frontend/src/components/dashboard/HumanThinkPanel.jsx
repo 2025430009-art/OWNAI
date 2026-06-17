@@ -397,7 +397,7 @@ export default function HumanThinkPanel() {
         {messages.map((msg, i) => (
           <MessageBubble key={`${msg.role}-${i}`} msg={msg} />
         ))}
-        {loading && (
+        {loading && !messages.some((m) => m.streaming) && (
           <div className="mb-4 rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
             <ThinkingDots />
           </div>

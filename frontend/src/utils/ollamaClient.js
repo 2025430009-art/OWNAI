@@ -1,12 +1,14 @@
+import { OLLAMA_MODELS } from './modelRouter.js';
+
 const OLLAMA_BASE = (import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
-const DEFAULT_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2';
+const DEFAULT_MODEL = import.meta.env.VITE_OLLAMA_MODEL || OLLAMA_MODELS.CHAT;
+const OLLAMA_TIMEOUT_MS = 15_000;
 
 export const RECOMMENDED_OLLAMA_MODELS = [
+  OLLAMA_MODELS.CHAT,
+  OLLAMA_MODELS.FALLBACK,
+  OLLAMA_MODELS.CODE,
   'llama3.2',
-  'mistral',
-  'llama3.1:8b',
-  'deepseek-r1:7b',
-  'qwen2.5:7b',
   'phi4',
 ];
 
@@ -63,7 +65,7 @@ export async function listOllamaModels() {
 }
 
 /**
- * Pick an installed Ollama model — falls back gracefully when the routed model is missing.
+ * Pick an installed Ollama model — prefers fast models, falls back gracefully.
  */
 export async function resolveOllamaModel(preferred) {
   const models = await listOllamaModels();
@@ -85,33 +87,7 @@ export async function resolveOllamaModel(preferred) {
   return models[0];
 }
 
-export async function* streamOllamaChat({
-  messages,
-  model = getSelectedOllamaModel(),
-  temperature = 0.7,
-}) {
-  const resolvedModel = await resolveOllamaModel(model);
-
-  const response = await fetch(`${OLLAMA_BASE}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: resolvedModel,
-      messages,
-      stream: true,
-      options: { temperature },
-    }),
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(
-      detail.includes('not found')
-        ? `Model "${resolvedModel}" is not installed. Run: ollama pull ${resolvedModel.split(':')[0]}`
-        : 'Ollama is not responding. Check that it is running.',
-    );
-  }
-
+async function* readOllamaChatStream(response) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -137,50 +113,77 @@ export async function* streamOllamaChat({
   }
 }
 
+async function fetchOllamaChatStream(model, messages, temperature) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${OLLAMA_BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages,
+        stream: true,
+        options: { temperature, num_predict: 512 },
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(
+        detail.includes('not found')
+          ? `Model "${model}" is not installed. Run: ollama pull ${model.split(':')[0]}`
+          : 'Ollama is not responding. Check that it is running.',
+      );
+    }
+
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function* streamOllamaChat({
+  messages,
+  model = getSelectedOllamaModel(),
+  temperature = 0.7,
+}) {
+  const primary = await resolveOllamaModel(model);
+  const fallback = await resolveOllamaModel(OLLAMA_MODELS.FALLBACK);
+  const modelsToTry = [primary];
+  if (fallback !== primary) modelsToTry.push(fallback);
+
+  let lastError;
+  for (const tryModel of modelsToTry) {
+    try {
+      const response = await fetchOllamaChatStream(tryModel, messages, temperature);
+      yield* readOllamaChatStream(response);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error.name === 'AbortError') {
+        lastError = new Error(`Ollama timed out after ${OLLAMA_TIMEOUT_MS / 1000}s — trying fallback model`);
+        lastError.code = 'timeout';
+      }
+    }
+  }
+
+  throw lastError || new Error('Ollama is not responding. Check that it is running.');
+}
+
 /** @deprecated Prefer streamOllamaChat with full message history */
 export async function* streamOllama({
   prompt,
   model = getSelectedOllamaModel(),
   temperature = 0.7,
 }) {
-  const response = await fetch(`${OLLAMA_BASE}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: true,
-      options: { temperature },
-    }),
+  yield* streamOllamaChat({
+    messages: [{ role: 'user', content: prompt }],
+    model,
+    temperature,
   });
-
-  if (!response.ok) {
-    throw new Error('Ollama is not responding. Check that it is running.');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const parsed = JSON.parse(line);
-        if (parsed.response) yield parsed.response;
-        if (parsed.done) return;
-      } catch {
-        // skip malformed line
-      }
-    }
-  }
 }
 
 export async function generateOllama(options) {

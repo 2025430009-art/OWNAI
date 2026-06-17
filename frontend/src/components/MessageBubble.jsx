@@ -5,6 +5,7 @@ import ThinkingVisualizer from './ThinkingVisualizer.jsx';
 import ConfidenceDisplay from './dashboard/ConfidenceDisplay.jsx';
 import { parseThinkingResult, shouldShowThinkingVisualizer } from '../utils/parseThinkingResult.js';
 import { MODE_LABELS } from '../constants/thinkingModes.js';
+import { ENABLE_REASONING } from '../config/inference.js';
 
 function ModeAutoTag({ reasoningMode, modeReason, autoDetected }) {
   if (!reasoningMode || reasoningMode === 'direct') return null;
@@ -34,6 +35,8 @@ function ThinkingBlock({
   content,
   isStreaming,
 }) {
+  if (!ENABLE_REASONING) return null;
+
   const [showReasoning, setShowReasoning] = useState(false);
   const [scratchpadOpen, setScratchpadOpen] = useState(true);
 

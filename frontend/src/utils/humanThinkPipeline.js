@@ -1,20 +1,11 @@
 import { thinkMessage } from '../api/client.js';
 import { consumeThinkingSse } from './thinkingStreamClient.js';
 
-const MAX_CLIENT_RETRIES = 3;
-const REQUEST_TIMEOUT_MS = 50_000;
 const CACHE_MAX = 30;
 const CACHE_TTL_MS = 10 * 60 * 1000;
-const LOW_CONFIDENCE_THRESHOLD = 60;
-
-const GENERIC_FALLBACK = 'I encountered an issue while reasoning through your request';
 
 /** @type {Map<string, { payload: object, expires: number }>} */
 const localCache = new Map();
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function normalizeKey(message, context = {}) {
   const memory = context.working_memory || [];
@@ -41,9 +32,18 @@ function setCached(key, payload) {
   localCache.set(key, { payload, expires: Date.now() + CACHE_TTL_MS });
 }
 
-function isGenericFailure(text) {
+function isFailureAnswer(text, meta = {}) {
   const normalized = String(text || '').trim();
-  return !normalized || normalized.includes(GENERIC_FALLBACK);
+  if (!normalized) return true;
+  if (meta.fallback || meta.pipeline_meta?.failed) return true;
+  if (normalized.includes('I encountered an issue while reasoning through your request')) return true;
+  if (normalized.startsWith('Reasoning timed out')) return true;
+  if (normalized.startsWith('Low confidence result')) return true;
+  if (normalized.startsWith('Could not parse the model response')) return true;
+  if (normalized.startsWith('The model failed to complete reasoning')) return true;
+  if (normalized.startsWith('AI provider is unavailable')) return true;
+  if (normalized.startsWith('Reasoning failed')) return true;
+  return false;
 }
 
 function classifyClientError(error) {
@@ -63,35 +63,27 @@ function classifyClientError(error) {
 function buildUserFacingError(failure) {
   switch (failure.code) {
     case 'timeout':
-      return 'Reasoning took too long. A simpler answer was requested automatically.';
+      return 'Reasoning took too long. The backend switched to a simpler answer path.';
     case 'low_confidence':
-      return 'Confidence was low, so the reasoning chain was simplified and retried.';
+      return 'Confidence was low, so the backend simplified and retried automatically.';
     case 'parse_error':
-      return 'The model response could not be parsed. Retrying with a simpler format.';
+      return 'The model response could not be parsed. Try rephrasing your question.';
     case 'network_error':
       return 'Could not reach the reasoning backend. Check your API connection.';
     case 'provider_error':
-      return 'The AI provider is unavailable. Verify backend API keys.';
+      return 'The AI provider is unavailable. Verify backend API keys on Render.';
     default:
-      return failure.message || 'Human Think failed after multiple retries.';
+      return failure.message || 'Human Think failed. Please try again.';
   }
 }
 
-async function fetchWithTimeout(promiseFactory, timeoutMs) {
-  return Promise.race([
-    promiseFactory(),
-    sleep(timeoutMs).then(() => {
-      const err = new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
-      err.code = 'timeout';
-      throw err;
-    }),
-  ]);
-}
-
-async function streamHumanThink({
+/**
+ * Client wrapper for human_think — streaming + local cache only.
+ * Retry/timeout/fallback logic lives on the backend pipeline.
+ */
+export async function runHumanThinkPipeline({
   message,
-  context,
-  mode,
+  context = {},
   onToken,
   onThinking,
   onConfidence,
@@ -99,10 +91,23 @@ async function streamHumanThink({
   onThinkingResult,
   onStatus,
 }) {
+  const key = normalizeKey(message, context);
+  const cached = getCached(key);
+  if (cached) {
+    onStatus?.({ type: 'cache_hit' });
+    onToken?.(cached.final_answer);
+    if (cached.thinking) onThinking?.(cached.thinking);
+    if (cached.confidence) onConfidence?.(cached.confidence);
+    return cached;
+  }
+
+  let pipelineMeta = null;
+  let sawError = null;
+
   const response = await thinkMessage({
     message,
-    mode,
-    context,
+    mode: 'human_think',
+    context: { ...context, score_confidence: true },
     stream: true,
     use_extended_thinking: false,
   });
@@ -128,150 +133,46 @@ async function streamHumanThink({
           code: meta.failure_code,
         });
       }
+      if (meta.pipeline_meta) pipelineMeta = meta.pipeline_meta;
       onMeta?.(meta);
     },
-    onThinkingResult: (tr) => onThinkingResult?.(tr),
-    onError: (err) => onStatus?.({ type: 'error', ...err }),
+    onThinkingResult: (tr) => {
+      if (tr?.pipeline_meta) pipelineMeta = tr.pipeline_meta;
+      onThinkingResult?.(tr);
+    },
+    onError: (err) => {
+      sawError = err;
+      onStatus?.({ type: 'error', ...err });
+    },
   });
 
-  return streamed;
-}
+  const answer = streamed.text?.trim() || '';
+  const meta = streamed.meta || {};
 
-/**
- * Client-side resilient human_think pipeline:
- * cache → stream → retry → timeout → silent direct fallback.
- */
-export async function runHumanThinkPipeline({
-  message,
-  context = {},
-  onToken,
-  onThinking,
-  onConfidence,
-  onMeta,
-  onThinkingResult,
-  onStatus,
-}) {
-  const key = normalizeKey(message, context);
-  const cached = getCached(key);
-  if (cached) {
-    onStatus?.({ type: 'cache_hit' });
-    onToken?.(cached.final_answer);
-    if (cached.thinking) onThinking?.(cached.thinking);
-    if (cached.confidence) onConfidence?.(cached.confidence);
-    return cached;
+  if (sawError || isFailureAnswer(answer, { ...meta, pipeline_meta: pipelineMeta })) {
+    throw new Error(
+      sawError?.message
+      || buildUserFacingError({ code: meta.failure_code || 'model_error', message: answer }),
+    );
   }
 
-  let lastFailure = null;
-  const modes = ['human_think', 'human_think', 'direct'];
+  const payload = {
+    final_answer: answer,
+    thinking: streamed.thinking,
+    confidence: streamed.confidence,
+    confidenceDetail: streamed.confidence?.detail,
+    thinkingResult: streamed.thinkingResult,
+    meta: streamed.meta,
+    mode_used: pipelineMeta?.mode_used || meta.fallback_mode || 'human_think',
+    pipeline_meta: pipelineMeta || streamed.thinkingResult?.pipeline_meta || meta,
+  };
 
-  for (let attempt = 0; attempt < MAX_CLIENT_RETRIES; attempt += 1) {
-    const mode = attempt >= 2 ? 'direct' : modes[attempt];
-    const simplified = attempt > 0;
-
-    if (simplified) {
-      onStatus?.({
-        type: 'retry',
-        attempt: attempt + 1,
-        code: lastFailure?.code || 'low_confidence',
-        message: buildUserFacingError(lastFailure || { code: 'model_error' }),
-      });
-    }
-
-    try {
-      const streamed = await fetchWithTimeout(
-        () => streamHumanThink({
-          message,
-          context: {
-            ...context,
-            score_confidence: true,
-            pipeline_simplified: simplified,
-          },
-          mode,
-          onToken,
-          onThinking,
-          onConfidence,
-          onMeta,
-          onThinkingResult,
-          onStatus,
-        }),
-        REQUEST_TIMEOUT_MS,
-      );
-
-      const answer = streamed.text?.trim() || '';
-      const confidenceScore = streamed.confidence?.score;
-
-      if (isGenericFailure(answer)) {
-        lastFailure = { code: 'model_error', message: 'Generic fallback response received' };
-        if (attempt < MAX_CLIENT_RETRIES - 1) {
-          await sleep(400 * (attempt + 1));
-          continue;
-        }
-      } else if (
-        confidenceScore != null
-        && confidenceScore < LOW_CONFIDENCE_THRESHOLD
-        && mode === 'human_think'
-        && attempt < MAX_CLIENT_RETRIES - 1
-      ) {
-        lastFailure = { code: 'low_confidence', message: `Confidence ${confidenceScore}%` };
-        await sleep(300);
-        continue;
-      } else {
-        const payload = {
-          final_answer: answer,
-          thinking: streamed.thinking,
-          confidence: streamed.confidence,
-          confidenceDetail: streamed.confidence?.detail,
-          thinkingResult: streamed.thinkingResult,
-          meta: streamed.meta,
-          mode_used: streamed.meta?.fallback_mode || mode,
-          pipeline_meta: streamed.thinkingResult?.pipeline_meta || streamed.meta,
-        };
-        setCached(key, payload);
-        return payload;
-      }
-    } catch (error) {
-      lastFailure = classifyClientError(error);
-      onStatus?.({ type: 'error', ...lastFailure });
-      if (attempt < MAX_CLIENT_RETRIES - 1) {
-        await sleep(500 * (attempt + 1));
-        continue;
-      }
-    }
-  }
-
-  // Last resort: non-stream direct call
-  try {
-    onStatus?.({ type: 'fallback', mode: 'direct', code: lastFailure?.code || 'unknown' });
-    const result = await thinkMessage({
-      message,
-      mode: 'direct',
-      context: { score_confidence: true },
-      stream: false,
-    });
-    const answer = result.final_answer?.trim() || '';
-    if (answer) {
-      const payload = {
-        final_answer: answer,
-        thinking: result.thinking || '',
-        confidence: result.confidence != null ? { score: result.confidence } : null,
-        confidenceDetail: result.confidence_detail,
-        mode_used: 'direct',
-        pipeline_meta: { silent_fallback: true, failure_code: lastFailure?.code },
-      };
-      setCached(key, payload);
-      onToken?.(answer);
-      return payload;
-    }
-  } catch (error) {
-    lastFailure = classifyClientError(error);
-  }
-
-  throw new Error(buildUserFacingError(lastFailure || { code: 'unknown' }));
+  setCached(key, payload);
+  return payload;
 }
 
 export {
   buildUserFacingError,
   classifyClientError,
-  isGenericFailure,
-  LOW_CONFIDENCE_THRESHOLD,
+  isFailureAnswer as isGenericFailure,
 };

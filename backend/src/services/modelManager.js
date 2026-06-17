@@ -1,3 +1,4 @@
+import { config } from '../config/index.js';
 import {
   loadModel,
   completion,
@@ -5,8 +6,8 @@ import {
   LLAMA_3_2_1B_INST_Q4_0,
 } from '@qvac/sdk';
 import path from 'path';
-import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { isQvacOrRpcError } from './ollamaInference.js';
 
 const BUILTIN_MODELS = {
   LLAMA_3_2_1B_INST_Q4_0,
@@ -18,6 +19,11 @@ class ModelManager {
     this.queue = [];
     this.processing = false;
     this.defaultModelKey = 'default';
+    this.qvacDisabled = false;
+  }
+
+  isEnabled() {
+    return config.inference?.enableQvac !== false && !this.qvacDisabled;
   }
 
   resolveModelSrc(modelSrc) {
@@ -34,37 +40,62 @@ class ModelManager {
   }
 
   async ensureLoaded(modelKey = this.defaultModelKey, modelSrc = config.defaultModelSrc) {
+    if (!this.isEnabled()) {
+      const err = new Error('QVAC local inference is disabled — use Anthropic or Ollama');
+      err.code = 'qvac_disabled';
+      throw err;
+    }
+
     if (this.cache.has(modelKey)) {
       const entry = this.cache.get(modelKey);
       entry.lastUsed = Date.now();
+      logger.info('[QVAC] model cache hit', { modelKey, modelId: entry.modelId });
       return entry.modelId;
     }
 
     const resolvedSrc = this.resolveModelSrc(modelSrc);
-    logger.info('Loading model', { modelKey, modelSrc: resolvedSrc });
+    logger.info('[QVAC] worker lifecycle: loadModel starting', { modelKey, modelSrc: resolvedSrc });
+    logger.info('[QVAC] worker lifecycle: spawning Bare RPC worker via @qvac/sdk (30s init timeout)');
 
     const startTime = Date.now();
-    const modelId = await loadModel({
-      modelSrc: resolvedSrc,
-      modelType: 'llm',
-      modelConfig: { ctx_size: config.modelCtxSize },
-      onProgress: (progress) => {
-        if (progress.percentage !== undefined) {
-          logger.debug('Model load progress', { modelKey, percentage: progress.percentage });
-        }
-      },
-    });
+    try {
+      const modelId = await loadModel({
+        modelSrc: resolvedSrc,
+        modelType: 'llm',
+        modelConfig: { ctx_size: config.modelCtxSize },
+        onProgress: (progress) => {
+          if (progress.percentage !== undefined) {
+            logger.debug('[QVAC] model download progress', { modelKey, percentage: progress.percentage });
+          }
+        },
+      });
 
-    this.cache.set(modelKey, {
-      modelId,
-      modelSrc: resolvedSrc,
-      loadedAt: Date.now(),
-      lastUsed: Date.now(),
-      loadTimeMs: Date.now() - startTime,
-    });
+      this.cache.set(modelKey, {
+        modelId,
+        modelSrc: resolvedSrc,
+        loadedAt: Date.now(),
+        lastUsed: Date.now(),
+        loadTimeMs: Date.now() - startTime,
+      });
 
-    logger.info('Model loaded', { modelKey, modelId, loadTimeMs: Date.now() - startTime });
-    return modelId;
+      logger.info('[QVAC] worker lifecycle: loadModel complete', {
+        modelKey,
+        modelId,
+        loadTimeMs: Date.now() - startTime,
+      });
+      return modelId;
+    } catch (error) {
+      logger.error('[QVAC] worker lifecycle: loadModel failed', {
+        modelKey,
+        error: error.message,
+        code: error.code,
+      });
+      if (isQvacOrRpcError(error)) {
+        this.qvacDisabled = true;
+        logger.warn('[QVAC] disabling QVAC for this process after RPC/worker failure');
+      }
+      throw error;
+    }
   }
 
   async generate(prompt, options = {}) {
@@ -83,6 +114,8 @@ class ModelManager {
         ? conversationHistory
         : [{ role: 'user', content: prompt }];
 
+      logger.info('[QVAC] completion starting', { modelKey, stream, turns: history.length });
+
       const run = completion({
         modelId,
         history,
@@ -96,6 +129,7 @@ class ModelManager {
         for await (const token of run.tokenStream) {
           output += token;
         }
+        logger.info('[QVAC] completion stream finished', { chars: output.length });
         return output;
       }
 
@@ -113,6 +147,7 @@ class ModelManager {
       history: conversationHistory,
     } = options;
 
+    logger.info('[QVAC] generateStream starting', { modelKey });
     const modelId = await this.ensureLoaded(modelKey, modelSrc);
     const history = conversationHistory?.length
       ? conversationHistory
@@ -165,9 +200,9 @@ class ModelManager {
     const entry = this.cache.get(modelKey);
     if (!entry) return false;
 
+    logger.info('[QVAC] unloadModel', { modelKey, modelId: entry.modelId });
     await unloadModel({ modelId: entry.modelId });
     this.cache.delete(modelKey);
-    logger.info('Model unloaded', { modelKey });
     return true;
   }
 

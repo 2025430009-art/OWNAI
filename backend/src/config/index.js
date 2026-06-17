@@ -58,6 +58,17 @@ export const config = {
   mongodb: {
     uri: process.env.MONGODB_URI || null,
   },
+  inference: {
+    /** Extended reasoning/scratchpad — disable on Render if QVAC worker unavailable */
+    enableReasoning: process.env.ENABLE_REASONING !== 'false',
+    /**
+     * QVAC spawns a Bare worker (RPC). Off by default in production — Render cannot run it.
+     * Set ENABLE_QVAC=true locally when @qvac/sdk + bare runtime are installed.
+     */
+    enableQvac: process.env.ENABLE_QVAC === 'true'
+      || (process.env.NODE_ENV !== 'production' && process.env.DISABLE_QVAC !== 'true'),
+    ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+  },
 };
 
 const INSECURE_JWT_SECRETS = new Set([

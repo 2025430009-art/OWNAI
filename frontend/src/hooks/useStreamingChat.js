@@ -40,7 +40,7 @@ async function streamBackendSse(response, onToken, onThinking, onConfidence, onM
 export default function useStreamingChat() {
   const [tokens, setTokens] = useState('');
   const [thinking, setThinking] = useState(false);
-  const [activeModel, setActiveModel] = useState('llama3.1:8b');
+  const [activeModel, setActiveModel] = useState('llama3.2:3b');
   const [activeMode, setActiveMode] = useState('FAST MODE');
   const [memoryFacts, setMemoryFacts] = useState(() => ownaiMemory.getFacts());
 

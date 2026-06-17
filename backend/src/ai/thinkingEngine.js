@@ -760,7 +760,15 @@ const GENERIC_FALLBACK_TEXT = 'I encountered an issue while reasoning through yo
 
 export function isGenericFallbackText(text) {
   const normalized = String(text || '').trim();
-  return !normalized || normalized === GENERIC_FALLBACK_TEXT;
+  if (!normalized) return true;
+  if (normalized === GENERIC_FALLBACK_TEXT) return true;
+  if (normalized.startsWith('Reasoning timed out')) return true;
+  if (normalized.startsWith('Low confidence result')) return true;
+  if (normalized.startsWith('Could not parse the model response')) return true;
+  if (normalized.startsWith('The model failed to complete reasoning')) return true;
+  if (normalized.startsWith('AI provider is unavailable')) return true;
+  if (normalized.startsWith('Reasoning failed')) return true;
+  return false;
 }
 
 /**
@@ -769,14 +777,18 @@ export function isGenericFallbackText(text) {
  */
 export function classifyThinkingFailure(error) {
   const code = error?.code || inferFailureCode(error?.message);
-  return {
-    code,
-    message: error?.message || 'Reasoning failed for an unknown reason',
-  };
+  const rawMessage = error?.message || 'Reasoning failed for an unknown reason';
+  const message = code === 'provider_error' && rawMessage.includes('50204')
+    ? 'Local model worker unavailable'
+    : rawMessage;
+  return { code, message };
 }
 
 function inferFailureCode(message = '') {
   const msg = String(message).toLowerCase();
+  if (msg.includes('50204') || msg.includes('rpc initialization') || msg.includes('rpc_init')) {
+    return 'provider_error';
+  }
   if (msg.includes('timed out') || msg.includes('timeout')) return 'timeout';
   if (msg.includes('parse') || msg.includes('json')) return 'parse_error';
   if (msg.includes('confidence')) return 'low_confidence';
@@ -813,12 +825,16 @@ export function buildFailureMessage(failure) {
 
 export function buildFallbackResponse(error) {
   const failure = classifyThinkingFailure(error);
+  const userText = buildFailureMessage(failure);
+  const isRpcFailure = failure.code === 'provider_error'
+    && (String(error?.message || '').includes('50204')
+      || String(error?.message || '').toLowerCase().includes('rpc initialization'));
   return {
-    text: buildFailureMessage(failure),
-    thinking: `Fallback activated: ${failure.code} — ${failure.message}`,
+    text: userText,
+    thinking: isRpcFailure ? '' : `Fallback activated: ${failure.code} — ${failure.message}`,
     confidence: {
       score: 20,
-      reasoning: buildFailureMessage(failure),
+      reasoning: userText,
     },
     failure,
   };

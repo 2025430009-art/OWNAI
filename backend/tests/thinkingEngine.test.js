@@ -20,9 +20,10 @@ import {
 } from '../src/ai/thinkingEngine.js';
 
 describe('ai/thinkingEngine — PART A modes', () => {
-  it('exports all 8 thinking modes', () => {
-    assert.equal(Object.keys(THINKING_MODES).length, 8);
+  it('exports all 9 thinking modes', () => {
+    assert.equal(Object.keys(THINKING_MODES).length, 9);
     assert.equal(THINKING_MODES.COT, 'chain_of_thought');
+    assert.equal(THINKING_MODES.HUMAN_THINK, 'human_think');
     assert.equal(THINKING_MODES.SOCRATIC, 'socratic');
     assert.equal(THINKING_MODES.DEBATE, 'debate');
   });
