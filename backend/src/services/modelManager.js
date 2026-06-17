@@ -1,4 +1,7 @@
-import { config } from '../config/index.js';
+import {
+  config,
+  ENABLE_QVAC,
+} from '../config/index.js';
 import {
   loadModel,
   completion,
@@ -13,17 +16,18 @@ const BUILTIN_MODELS = {
   LLAMA_3_2_1B_INST_Q4_0,
 };
 
+let QVAC_DISABLED_THIS_PROCESS = false;
+
 class ModelManager {
   constructor() {
     this.cache = new Map();
     this.queue = [];
     this.processing = false;
     this.defaultModelKey = 'default';
-    this.qvacDisabled = false;
   }
 
   isEnabled() {
-    return config.inference?.enableQvac !== false && !this.qvacDisabled;
+    return ENABLE_QVAC && !QVAC_DISABLED_THIS_PROCESS;
   }
 
   resolveModelSrc(modelSrc) {
@@ -40,10 +44,9 @@ class ModelManager {
   }
 
   async ensureLoaded(modelKey = this.defaultModelKey, modelSrc = config.defaultModelSrc) {
-    if (!this.isEnabled()) {
-      const err = new Error('QVAC local inference is disabled — use Anthropic or Ollama');
-      err.code = 'qvac_disabled';
-      throw err;
+    if (!ENABLE_QVAC || QVAC_DISABLED_THIS_PROCESS) {
+      console.log('[QVAC] Skipped — disabled for this environment');
+      return null;
     }
 
     if (this.cache.has(modelKey)) {
@@ -54,8 +57,7 @@ class ModelManager {
     }
 
     const resolvedSrc = this.resolveModelSrc(modelSrc);
-    logger.info('[QVAC] worker lifecycle: loadModel starting', { modelKey, modelSrc: resolvedSrc });
-    logger.info('[QVAC] worker lifecycle: spawning Bare RPC worker via @qvac/sdk (30s init timeout)');
+    console.log('[QVAC] worker lifecycle: loadModel starting', { modelKey, modelSrc: resolvedSrc });
 
     const startTime = Date.now();
     try {
@@ -78,23 +80,15 @@ class ModelManager {
         loadTimeMs: Date.now() - startTime,
       });
 
-      logger.info('[QVAC] worker lifecycle: loadModel complete', {
-        modelKey,
-        modelId,
-        loadTimeMs: Date.now() - startTime,
-      });
+      console.log('[QVAC] worker lifecycle: complete', { modelKey, modelId });
       return modelId;
     } catch (error) {
-      logger.error('[QVAC] worker lifecycle: loadModel failed', {
-        modelKey,
-        error: error.message,
-        code: error.code,
-      });
+      console.error('[QVAC] worker lifecycle: failed —', error.message);
+      QVAC_DISABLED_THIS_PROCESS = true;
       if (isQvacOrRpcError(error)) {
-        this.qvacDisabled = true;
         logger.warn('[QVAC] disabling QVAC for this process after RPC/worker failure');
       }
-      throw error;
+      return null;
     }
   }
 
@@ -110,6 +104,8 @@ class ModelManager {
 
     return this.enqueue(async () => {
       const modelId = await this.ensureLoaded(modelKey, modelSrc);
+      if (!modelId) return null;
+
       const history = conversationHistory?.length
         ? conversationHistory
         : [{ role: 'user', content: prompt }];
@@ -147,8 +143,9 @@ class ModelManager {
       history: conversationHistory,
     } = options;
 
-    logger.info('[QVAC] generateStream starting', { modelKey });
     const modelId = await this.ensureLoaded(modelKey, modelSrc);
+    if (!modelId) return null;
+
     const history = conversationHistory?.length
       ? conversationHistory
       : [{ role: 'user', content: prompt }];

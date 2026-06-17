@@ -1,9 +1,31 @@
+/*
+ * RENDER DEPLOYMENT — set these in Render dashboard:
+ *   ANTHROPIC_API_KEY = sk-ant-...    ← primary inference
+ *   ENABLE_QVAC       = false         ← no Bare runtime on Render
+ *   ENABLE_REASONING  = false         ← hide scratchpad
+ *   INFERENCE_MODEL   = llama3.2:3b   ← for local fallback
+ *
+ * LOCAL DEV — create backend/.env:
+ *   ENABLE_QVAC=true
+ *   ENABLE_REASONING=true
+ *   OLLAMA_URL=http://localhost:11434
+ */
+
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+
+const IS_RENDER = process.env.RENDER === 'true'
+  || process.env.RENDER_SERVICE_ID !== undefined;
+
+export const ENABLE_QVAC = process.env.ENABLE_QVAC === 'true' && !IS_RENDER;
+export const ENABLE_REASONING = process.env.ENABLE_REASONING !== 'false' && !IS_RENDER;
+export const INFERENCE_MODEL = process.env.INFERENCE_MODEL || 'llama3.2:3b';
+export const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+export const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || null;
 
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
@@ -45,7 +67,7 @@ export const config = {
     ),
   },
   anthropic: {
-    apiKey: process.env.ANTHROPIC_API_KEY || null,
+    apiKey: ANTHROPIC_KEY,
     thinkingBudgetTokens: parseInt(process.env.ANTHROPIC_THINKING_BUDGET || '8000', 10),
   },
   promptToVideo: {
@@ -59,15 +81,10 @@ export const config = {
     uri: process.env.MONGODB_URI || null,
   },
   inference: {
-    /** Extended reasoning/scratchpad — disable on Render if QVAC worker unavailable */
-    enableReasoning: process.env.ENABLE_REASONING !== 'false',
-    /**
-     * QVAC spawns a Bare worker (RPC). Off by default in production — Render cannot run it.
-     * Set ENABLE_QVAC=true locally when @qvac/sdk + bare runtime are installed.
-     */
-    enableQvac: process.env.ENABLE_QVAC === 'true'
-      || (process.env.NODE_ENV !== 'production' && process.env.DISABLE_QVAC !== 'true'),
-    ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+    enableReasoning: ENABLE_REASONING,
+    enableQvac: ENABLE_QVAC,
+    ollamaUrl: OLLAMA_URL,
+    inferenceModel: INFERENCE_MODEL,
   },
 };
 

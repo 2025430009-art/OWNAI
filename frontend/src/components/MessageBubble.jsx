@@ -79,6 +79,8 @@ function ThinkingBlock({
 
   if (!thinking?.trim()) return null;
 
+  if (import.meta.env.VITE_ENABLE_REASONING === 'false') return null;
+
   return (
     <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50/70 dark:border-violet-900 dark:bg-violet-950/20">
       <button

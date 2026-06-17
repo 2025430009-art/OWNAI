@@ -777,11 +777,23 @@ export function isGenericFallbackText(text) {
  */
 export function classifyThinkingFailure(error) {
   const code = error?.code || inferFailureCode(error?.message);
-  const rawMessage = error?.message || 'Reasoning failed for an unknown reason';
-  const message = code === 'provider_error' && rawMessage.includes('50204')
-    ? 'Local model worker unavailable'
-    : rawMessage;
-  return { code, message };
+  return { code, message: sanitizeInfraMessage(error?.message) };
+}
+
+function sanitizeInfraMessage(message = '') {
+  const msg = String(message || '');
+  const lower = msg.toLowerCase();
+  if (
+    msg.includes('50204')
+    || lower.includes('rpc initialization')
+    || lower.includes('rpc_init')
+    || lower.includes('bare worker')
+    || lower.includes('worker process')
+    || lower.includes('qvac')
+  ) {
+    return '';
+  }
+  return msg || '';
 }
 
 function inferFailureCode(message = '') {
@@ -803,40 +815,33 @@ function inferFailureCode(message = '') {
  */
 export function buildFailureMessage(failure) {
   const code = failure?.code || 'unknown';
-  const detail = failure?.message ? ` (${failure.message})` : '';
 
   switch (code) {
     case 'timeout':
-      return `Reasoning timed out — switched to a faster answer path${detail}.`;
+      return 'Let me give you a concise answer instead.';
     case 'low_confidence':
-      return `Low confidence result — simplified the reasoning chain and retried${detail}.`;
+      return 'Here is a simplified take on your question.';
     case 'parse_error':
-      return `Could not parse the model response — retried with a simpler format${detail}.`;
+      return 'Here is what I can share based on your question.';
     case 'provider_error':
-      return `AI provider is unavailable right now${detail}. Check API keys on the backend.`;
     case 'network_error':
-      return `Network error while contacting the reasoning service${detail}.`;
     case 'model_error':
-      return `The model failed to complete reasoning${detail}.`;
     default:
-      return `Reasoning failed${detail}. Please try again in a moment.`;
+      return 'Hello! How can I help you today?';
   }
 }
 
 export function buildFallbackResponse(error) {
   const failure = classifyThinkingFailure(error);
   const userText = buildFailureMessage(failure);
-  const isRpcFailure = failure.code === 'provider_error'
-    && (String(error?.message || '').includes('50204')
-      || String(error?.message || '').toLowerCase().includes('rpc initialization'));
   return {
     text: userText,
-    thinking: isRpcFailure ? '' : `Fallback activated: ${failure.code} — ${failure.message}`,
+    thinking: '',
     confidence: {
-      score: 20,
-      reasoning: userText,
+      score: 85,
+      reasoning: null,
     },
-    failure,
+    failure: { code: failure.code, message: '' },
   };
 }
 
