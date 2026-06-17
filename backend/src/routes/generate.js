@@ -70,7 +70,9 @@ async function handleGenerate(req, res, next) {
     }
 
     const ragNamespace = resolveRagNamespace(req);
-    const ragContext = await buildRagContext(finalPrompt, 4, ragNamespace).catch(() => null);
+    const ragContext = ragNamespace
+      ? await buildRagContext(finalPrompt, 4, ragNamespace).catch(() => null)
+      : null;
     let conversationHistory = augmentPromptWithRag(finalPrompt, ragContext, messages || []);
 
     if (req.user?.id) {

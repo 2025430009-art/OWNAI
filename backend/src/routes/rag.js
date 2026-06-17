@@ -8,6 +8,7 @@ import { ingestFile, queryDocuments, ragStatus, clearRagStore } from '../rag/rag
 import { assertRagClearAccess, resolveRagNamespace } from '../rag/namespace.js';
 import { RagQuotaError } from '../rag/vectorStore.js';
 import { config } from '../config/index.js';
+import { ragUploadFilter } from '../utils/ragUploadAllowlist.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -15,11 +16,24 @@ const router = Router();
 const upload = multer({
   dest: config.uploadPath,
   limits: { fileSize: config.uploadMaxFileSize },
+  fileFilter: ragUploadFilter,
 });
+
+function requireRagNamespace(req, res) {
+  const namespace = resolveRagNamespace(req);
+  if (!namespace) {
+    res.status(400).json({
+      error: 'Valid x-session-id header (UUID v4) or authentication required for RAG operations',
+    });
+    return null;
+  }
+  return namespace;
+}
 
 router.get('/status', inferenceAuth, async (req, res, next) => {
   try {
-    const namespace = resolveRagNamespace(req);
+    const namespace = requireRagNamespace(req, res);
+    if (!namespace) return;
     const status = await ragStatus(namespace);
     res.json({ success: true, ...status });
   } catch (error) {
@@ -32,7 +46,11 @@ router.post('/ingest', inferenceAuth, inferenceRateLimiter, upload.single('file'
     return res.status(400).json({ error: 'file is required' });
   }
 
-  const namespace = resolveRagNamespace(req);
+  const namespace = requireRagNamespace(req, res);
+  if (!namespace) {
+    await fs.unlink(req.file.path).catch(() => {});
+    return;
+  }
 
   try {
     const docCount = (await ragStatus(namespace)).documentCount;
@@ -52,6 +70,9 @@ router.post('/ingest', inferenceAuth, inferenceRateLimiter, upload.single('file'
   } catch (error) {
     await fs.unlink(req.file.path).catch(() => {});
     logger.warn('RAG ingest failed', { error: error.message, namespace });
+    if (/unsupported file type/i.test(error.message)) {
+      return res.status(400).json({ error: error.message });
+    }
     if (error instanceof RagQuotaError) {
       return res.status(429).json({ error: 'RAG quota exceeded' });
     }
@@ -72,7 +93,8 @@ router.post('/query', inferenceAuth, inferenceRateLimiter, async (req, res, next
   }
 
   try {
-    const namespace = resolveRagNamespace(req);
+    const namespace = requireRagNamespace(req, res);
+    if (!namespace) return;
     const context = await queryDocuments(question.trim(), topK, namespace);
     res.json({
       success: true,

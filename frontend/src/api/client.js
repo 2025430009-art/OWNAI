@@ -8,6 +8,7 @@ import {
   probeBackend,
   SIGNIN_REQUIRES_BACKEND_MSG,
 } from '../utils/apiConfig.js';
+import { AuthRequiredError } from '../utils/authErrors.js';
 import { getOwnaiSessionId } from '../utils/sessionId.js';
 
 export {
@@ -25,6 +26,9 @@ function requireBackend() {
 }
 
 function throwApiError(response, error = {}) {
+  if (response.status === 401) {
+    throw new AuthRequiredError(error.error || error.message || 'Authentication required');
+  }
   if ([404, 405, 502, 503].includes(response.status)) {
     throw new Error(getBackendUnavailableMessage());
   }

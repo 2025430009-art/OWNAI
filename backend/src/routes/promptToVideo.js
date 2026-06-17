@@ -14,6 +14,10 @@ import {
   getJobByShareToken,
 } from '../services/promptToVideo/videoJobStore.js';
 import { generateVideo, cancelJob } from '../services/promptToVideo/orchestrator.js';
+import {
+  canAccessJob,
+  canAccessJobByShareToken,
+} from '../services/promptToVideo/jobAccess.js';
 import { resolveDbUserId } from '../services/thinkingLogService.js';
 import { logger } from '../utils/logger.js';
 
@@ -59,6 +63,9 @@ router.get('/jobs/:id', inferenceAuth, async (req, res, next) => {
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
+    if (!canAccessJob(req, job)) {
+      return res.status(403).json({ error: 'Not authorized to access this job' });
+    }
     res.json({ success: true, job });
   } catch (error) {
     next(error);
@@ -78,8 +85,8 @@ router.get('/share/:token', async (req, res, next) => {
         title: job.title,
         mood: job.mood,
         prompt: job.prompt,
-        videoUrl: `/api/v1/prompt-to-video/jobs/${job.id}/video`,
-        thumbnailUrl: `/api/v1/prompt-to-video/jobs/${job.id}/thumbnail`,
+        videoUrl: `/api/v1/prompt-to-video/share/${req.params.token}/video`,
+        thumbnailUrl: `/api/v1/prompt-to-video/share/${req.params.token}/thumbnail`,
         shareToken: job.share_token,
         created_at: job.created_at,
       },
@@ -89,10 +96,13 @@ router.get('/share/:token', async (req, res, next) => {
   }
 });
 
-router.get('/jobs/:id/thumbnail', async (req, res, next) => {
+router.get('/share/:token/thumbnail', async (req, res, next) => {
   try {
-    const job = await getJob(req.params.id);
-    if (!job?.thumbnail_path || !fs.existsSync(job.thumbnail_path)) {
+    const job = await getJobByShareToken(req.params.token);
+    if (!job || !canAccessJobByShareToken(req.params.token, job)) {
+      return res.status(404).json({ error: 'Thumbnail not found' });
+    }
+    if (!job.thumbnail_path || !fs.existsSync(job.thumbnail_path)) {
       return res.status(404).json({ error: 'Thumbnail not ready' });
     }
     res.setHeader('Content-Type', 'image/jpeg');
@@ -103,10 +113,47 @@ router.get('/jobs/:id/thumbnail', async (req, res, next) => {
   }
 });
 
-router.get('/jobs/:id/video', async (req, res, next) => {
+router.get('/share/:token/video', async (req, res, next) => {
+  try {
+    const job = await getJobByShareToken(req.params.token);
+    if (!job || !canAccessJobByShareToken(req.params.token, job)) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+    if (!job.output_path || !fs.existsSync(job.output_path)) {
+      return res.status(404).json({ error: 'Video not ready' });
+    }
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `inline; filename="${job.title || 'prompt-to-video'}.mp4"`);
+    fs.createReadStream(job.output_path).pipe(res);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/jobs/:id/thumbnail', inferenceAuth, async (req, res, next) => {
   try {
     const job = await getJob(req.params.id);
-    if (!job?.output_path || !fs.existsSync(job.output_path)) {
+    if (!job || !canAccessJob(req, job)) {
+      return res.status(403).json({ error: 'Not authorized to access this thumbnail' });
+    }
+    if (!job.thumbnail_path || !fs.existsSync(job.thumbnail_path)) {
+      return res.status(404).json({ error: 'Thumbnail not ready' });
+    }
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    fs.createReadStream(job.thumbnail_path).pipe(res);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/jobs/:id/video', inferenceAuth, async (req, res, next) => {
+  try {
+    const job = await getJob(req.params.id);
+    if (!job || !canAccessJob(req, job)) {
+      return res.status(403).json({ error: 'Not authorized to access this video' });
+    }
+    if (!job.output_path || !fs.existsSync(job.output_path)) {
       return res.status(404).json({ error: 'Video not ready' });
     }
     res.setHeader('Content-Type', 'video/mp4');
@@ -119,6 +166,13 @@ router.get('/jobs/:id/video', async (req, res, next) => {
 
 router.delete('/jobs/:id', inferenceAuth, async (req, res, next) => {
   try {
+    const job = await getJob(req.params.id);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    if (!canAccessJob(req, job)) {
+      return res.status(403).json({ error: 'Not authorized to delete this job' });
+    }
     const deleted = await deleteJob(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'Job not found' });
@@ -129,7 +183,14 @@ router.delete('/jobs/:id', inferenceAuth, async (req, res, next) => {
   }
 });
 
-router.post('/jobs/:id/cancel', inferenceAuth, (req, res) => {
+router.post('/jobs/:id/cancel', inferenceAuth, async (req, res) => {
+  const job = await getJob(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  if (!canAccessJob(req, job)) {
+    return res.status(403).json({ error: 'Not authorized to cancel this job' });
+  }
   const cancelled = cancelJob(req.params.id);
   res.json({ success: true, cancelled });
 });

@@ -8,7 +8,7 @@ import {
   USER_UNAVAILABLE_MSG,
 } from '../utils/apiConfig.js';
 
-export default function AuthForm({ onAuth }) {
+export default function AuthForm({ onAuth, subtitle }) {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -52,7 +52,7 @@ export default function AuthForm({ onAuth }) {
         {mode === 'login' ? 'Sign In' : 'Create Account'}
       </h2>
       <p className="text-sm text-slate-400 mb-4">
-        {mode === 'login' ? 'Access usage tracking and saved sessions' : 'Register for the OWN AI platform'}
+        {subtitle || (mode === 'login' ? 'Access usage tracking and saved sessions' : 'Register for the OWN AI platform')}
       </p>
 
       {statusMessage && (

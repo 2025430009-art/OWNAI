@@ -43,57 +43,9 @@ function ThinkingDots() {
   );
 }
 
-function RunModal({ open, lines, onClose }) {
-  if (!open) return null;
-  return (
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
-    >
-      <div className="w-full max-w-2xl rounded-2xl border border-violet-400/30 bg-[#080814] p-5 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="font-mono text-xs uppercase tracking-wider text-violet-300">OWN AI - Run Output</p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-7 w-7 rounded-md bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-          >
-            ×
-          </button>
-        </div>
-        <div className="max-h-[55vh] overflow-auto rounded-xl border border-white/10 bg-[#03030a] p-4 font-mono text-xs leading-relaxed">
-          {lines.length ? (
-            lines.map((line, i) => (
-              <div
-                key={`${line.type}-${i}`}
-                className={
-                  line.type === 'err'
-                    ? 'text-rose-400'
-                    : line.type === 'warn'
-                      ? 'text-amber-300'
-                      : line.type === 'info'
-                        ? 'text-violet-300'
-                        : 'text-slate-100'
-                }
-              >
-                {line.text}
-              </div>
-            ))
-          ) : (
-            <div className="text-violet-300">// No output</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function CodeToolbar({ code, language = 'txt' }) {
   const [copied, setCopied] = useState(false);
-  const [runOpen, setRunOpen] = useState(false);
-  const [runLines, setRunLines] = useState([]);
 
   const copy = useCallback(async () => {
     try {
@@ -115,46 +67,15 @@ function CodeToolbar({ code, language = 'txt' }) {
     URL.revokeObjectURL(url);
   }, [code, language]);
 
-  const run = useCallback(() => {
-    const lang = (language || '').toLowerCase();
-    if (!['js', 'javascript', 'mjs', 'cjs'].includes(lang)) {
-      setRunLines([{ type: 'info', text: `Run supports JavaScript only. Current language: ${lang || 'plain'}` }]);
-      setRunOpen(true);
-      return;
-    }
-    const logs = [];
-    const fakeConsole = {
-      log: (...a) => logs.push({ type: 'out', text: a.map(String).join(' ') }),
-      error: (...a) => logs.push({ type: 'err', text: `❌ ${a.map(String).join(' ')}` }),
-      warn: (...a) => logs.push({ type: 'warn', text: `⚠ ${a.map(String).join(' ')}` }),
-      info: (...a) => logs.push({ type: 'info', text: `ℹ ${a.map(String).join(' ')}` }),
-    };
-    try {
-      const fn = new Function('console', code);
-      fn(fakeConsole);
-      setRunLines(logs.length ? logs : [{ type: 'info', text: '// No console output.' }]);
-    } catch (e) {
-      setRunLines([{ type: 'err', text: `Error: ${e.message}` }]);
-    }
-    setRunOpen(true);
-  }, [code, language]);
-
   return (
-    <>
-      <div className="flex items-center gap-0.5 border-b border-white/10 bg-[#0e0e20] p-1.5">
-        <button type="button" onClick={copy} className="rounded px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10 hover:text-slate-100">
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
-        <button type="button" onClick={download} className="rounded px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10 hover:text-slate-100">
-          Download
-        </button>
-        <span className="mx-1 h-4 w-px bg-white/10" />
-        <button type="button" onClick={run} className="rounded px-2 py-1 text-[11px] text-violet-300 hover:bg-violet-500/15 hover:text-violet-200">
-          Run
-        </button>
-      </div>
-      <RunModal open={runOpen} lines={runLines} onClose={() => setRunOpen(false)} />
-    </>
+    <div className="flex items-center gap-0.5 border-b border-white/10 bg-[#0e0e20] p-1.5">
+      <button type="button" onClick={copy} className="rounded px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10 hover:text-slate-100">
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+      <button type="button" onClick={download} className="rounded px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10 hover:text-slate-100">
+        Download
+      </button>
+    </div>
   );
 }
 

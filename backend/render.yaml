@@ -17,8 +17,10 @@ services:
         value: "false"
       - key: PORT
         value: 10000
-      - key: ALLOW_PUBLIC_INFERENCE
+      - key: REQUIRE_API_AUTH
         value: "true"
+      - key: ALLOW_PUBLIC_INFERENCE
+        value: "false"
       - key: CORS_ORIGIN
         value: "https://2025430009-art.github.io"
       - key: ANTHROPIC_API_KEY

@@ -34,6 +34,7 @@ jobs:
         env:
           GITHUB_PAGES: 'true'
           # Public Render API — override via repo secret VITE_API_URL if your service URL differs
+          # Never add VITE_ANTHROPIC_KEY — API keys must stay on the backend only
           VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ownai-6pc9.onrender.com' }}
         run: npm run build --workspace=frontend
 

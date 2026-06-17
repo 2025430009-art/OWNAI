@@ -4,7 +4,6 @@ import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
 import { runHumanThinkPipeline } from '../utils/humanThinkPipeline.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
 import { streamFallbackChat } from '../utils/fallbackChat.js';
-import { streamAnthropicDirect } from '../utils/anthropicDirect.js';
 import { buildChatMessages, resolveHistory } from '../utils/memory.js';
 import ownaiMemory from '../utils/ownaiMemory.js';
 import { detectTask } from '../utils/modelRouter.js';
@@ -95,8 +94,6 @@ export default function useStreamingChat() {
       modelLabel = await resolveOllamaModel(task.model);
     } else if (currentAiMode === AI_MODES.BACKEND) {
       modelLabel = model_key || 'QVAC Llama 3.2';
-    } else if (currentAiMode === AI_MODES.CLOUD) {
-      modelLabel = 'claude-sonnet-4-6';
     } else {
       modelLabel = 'OWNAI';
     }
@@ -120,14 +117,6 @@ export default function useStreamingChat() {
       if (currentAiMode === AI_MODES.LOCAL) {
         const content = await consumeStream(
           streamOllamaChat({ messages: chatMessages, model: modelLabel, temperature }),
-          handleToken,
-        );
-        return persist(content);
-      }
-
-      if (currentAiMode === AI_MODES.CLOUD) {
-        const content = await consumeStream(
-          streamAnthropicDirect({ messages: chatMessages, maxTokens: max_tokens }),
           handleToken,
         );
         return persist(content);

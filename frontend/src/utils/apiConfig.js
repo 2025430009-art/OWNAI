@@ -1,5 +1,5 @@
 import { isOllamaAvailable } from './ollamaClient.js';
-import { hasAnthropicDirect } from './anthropicDirect.js';
+import { isAuthRequiredError, AUTH_REQUIRED_MSG } from './authErrors.js';
 
 const STORAGE_KEY = 'ownai_api_url';
 export const DEFAULT_LOCAL_API_URL = 'http://localhost:3000';
@@ -31,6 +31,11 @@ export const MODE_LABELS = {
   [AI_MODES.CLOUD]: 'Cloud — OWNAI',
   [AI_MODES.STATIC]: 'OWNAI',
 };
+
+export {
+  AUTH_REQUIRED_MSG,
+  isAuthRequiredError,
+} from './authErrors.js';
 
 export const USER_UNAVAILABLE_MSG =
   'OWNAI is currently starting up. Please try again in a moment.';
@@ -214,7 +219,7 @@ export async function canReachBackend(retries = 3) {
 }
 
 /**
- * Detect best available AI mode: backend → Ollama (local dev) → Anthropic direct → static.
+ * Detect best available AI mode: backend → Ollama (local dev) → static.
  */
 export async function detectAIMode() {
   if (await canReachBackend(3)) {
@@ -222,9 +227,6 @@ export async function detectAIMode() {
   }
   if (isLocalDev() && await isOllamaAvailable()) {
     return AI_MODES.LOCAL;
-  }
-  if (hasAnthropicDirect()) {
-    return AI_MODES.CLOUD;
   }
   return AI_MODES.STATIC;
 }
@@ -235,10 +237,10 @@ export function getModeLabel(mode) {
 
 /** User-friendly error — never expose dev instructions or raw HTTP codes */
 export function friendlyAIError(error) {
-  const msg = error?.message || '';
-  if (/authentication required|401|invalid or expired token/i.test(msg)) {
-    return USER_UNAVAILABLE_MSG;
+  if (isAuthRequiredError(error)) {
+    return AUTH_REQUIRED_MSG;
   }
+  const msg = error?.message || '';
   if (/405|404|502|503|failed to fetch|network|backend|health|not connected|unreachable|timed out|ollama/i.test(msg)) {
     return USER_UNAVAILABLE_MSG;
   }

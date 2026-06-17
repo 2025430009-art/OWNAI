@@ -1,22 +1,28 @@
 import { config } from '../config/index.js';
+import { parseSessionId } from '../utils/sessionId.js';
 
 function getSessionId(req) {
-  return req.headers['x-session-id']?.toString()
-    || req.body?.sessionId?.toString()
-    || req.body?.session_id?.toString()
-    || req.query?.session_id?.toString()
-    || null;
+  return parseSessionId(
+    req.headers['x-session-id']
+    || req.body?.sessionId
+    || req.body?.session_id
+    || req.query?.session_id,
+  );
 }
 
 /** Resolve the RAG namespace for the current request. */
 export function resolveRagNamespace(req) {
-  if (req.user?.id) {
+  if (req.user?.id && req.user.id !== 'public') {
     return String(req.user.id);
   }
 
   const sessionId = getSessionId(req);
   if (sessionId) {
     return `session:${sessionId}`;
+  }
+
+  if (config.nodeEnv === 'production') {
+    return null;
   }
 
   return 'global';
@@ -30,11 +36,11 @@ export function isRagAdmin(user) {
 
 /** Require identity for clear; restrict cross-namespace clears to admins. */
 export function assertRagClearAccess(req, res, next) {
-  const hasUser = Boolean(req.user?.id);
+  const hasUser = Boolean(req.user?.id && req.user.id !== 'public');
   const sessionId = getSessionId(req);
 
   if (!hasUser && !sessionId) {
-    return res.status(403).json({ error: 'Authentication or session ID required to clear RAG store' });
+    return res.status(403).json({ error: 'Authentication or valid session ID required to clear RAG store' });
   }
 
   const callerNamespace = resolveRagNamespace(req);

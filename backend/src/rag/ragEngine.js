@@ -222,7 +222,7 @@ export async function queryDocuments(question, topK = 4, namespace = null) {
   }
 
   let result = await queryScoped(ns);
-  if (!result && ns !== 'global') {
+  if (!result && ns !== 'global' && config.nodeEnv !== 'production') {
     result = await queryScoped('global');
   }
   return result || null;

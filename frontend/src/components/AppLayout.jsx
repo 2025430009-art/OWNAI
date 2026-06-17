@@ -13,8 +13,10 @@ import {
   listAIEngines,
   ingestRagDocument,
   getMe,
+  logout,
 } from '../api/client.js';
-import { canReachBackend } from '../utils/apiConfig.js';
+import { canReachBackend, isAuthRequiredError } from '../utils/apiConfig.js';
+import AuthModal from './AuthModal.jsx';
 import { FALLBACK_ENGINES, resolveEngine } from '../utils/aiEngines.js';
 
 const DEFAULT_ENGINES = FALLBACK_ENGINES;
@@ -38,6 +40,21 @@ export default function AppLayout({ theme, onToggleTheme }) {
   );
   const [loadedDocument, setLoadedDocument] = useState(null);
   const [showHome, setShowHome] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+
+  const openSignIn = useCallback(() => setAuthOpen(true), []);
+  const handleAuth = useCallback((nextUser) => {
+    setUser(nextUser);
+    setAuthOpen(false);
+  }, []);
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+    } catch {
+      // clear local session anyway
+    }
+    setUser(null);
+  }, []);
 
   const {
     sessions,
@@ -186,6 +203,9 @@ export default function AppLayout({ theme, onToggleTheme }) {
       }
     } catch (error) {
       removeStreamingPlaceholder(sessionId);
+      if (isAuthRequiredError(error)) {
+        setAuthOpen(true);
+      }
       appendMessage(sessionId, {
         role: 'assistant',
         content: friendlyAIError(error),
@@ -227,9 +247,16 @@ export default function AppLayout({ theme, onToggleTheme }) {
         try {
           await ingestRagDocument(file, sessionId);
           setLoadedDocument(file.name);
-        } catch {
-          // optional
+        } catch (err) {
+          if (isAuthRequiredError(err)) {
+            setAuthOpen(true);
+            break;
+          }
         }
+      }
+    } catch (err) {
+      if (isAuthRequiredError(err)) {
+        setAuthOpen(true);
       }
     } finally {
       setUploading(false);
@@ -280,6 +307,8 @@ export default function AppLayout({ theme, onToggleTheme }) {
             setSidebarOpen((o) => !o);
           }}
           user={user}
+          onSignIn={openSignIn}
+          onLogout={handleLogout}
         />
       </div>
 
@@ -300,6 +329,15 @@ export default function AppLayout({ theme, onToggleTheme }) {
             <span className="truncate text-xs text-emerald-700 dark:text-emerald-400">
               ✓ {loadedDocument} loaded
             </span>
+          )}
+          {!user && backendReady && (
+            <button
+              type="button"
+              onClick={openSignIn}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-violet-950/50"
+            >
+              Sign in
+            </button>
           )}
           <div className="ml-auto">
             <button
@@ -345,6 +383,12 @@ export default function AppLayout({ theme, onToggleTheme }) {
           />
         )}
       </main>
+
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onAuth={handleAuth}
+      />
     </div>
   );
 }

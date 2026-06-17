@@ -411,7 +411,9 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
 
   try {
     const ragNamespace = resolveRagNamespace(req);
-    const ragContext = await buildRagContext(message, 4, ragNamespace).catch(() => null);
+    const ragContext = ragNamespace
+      ? await buildRagContext(message, 4, ragNamespace).catch(() => null)
+      : null;
     const ragMessage = buildRagPrompt(message, ragContext);
 
     const dbUserId = resolveDbUserId(req);

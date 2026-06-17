@@ -4,7 +4,6 @@ import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
 import { runHumanThinkPipeline } from '../utils/humanThinkPipeline.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
 import { streamFallbackChat } from '../utils/fallbackChat.js';
-import { streamAnthropicDirect } from '../utils/anthropicDirect.js';
 import { buildChatMessages, resolveHistory } from '../utils/memory.js';
 import ownaiMemory from '../utils/ownaiMemory.js';
 import { detectTask } from '../utils/modelRouter.js';
@@ -111,8 +110,6 @@ export default function useAI() {
       modelLabel = await resolveOllamaModel(task.model);
     } else if (activeMode === AI_MODES.BACKEND) {
       modelLabel = model_key || 'QVAC Llama 3.2';
-    } else if (activeMode === AI_MODES.CLOUD) {
-      modelLabel = 'claude-sonnet-4-6';
     } else {
       modelLabel = 'OWNAI';
     }
@@ -131,24 +128,15 @@ export default function useAI() {
     };
 
     try {
-    if (activeMode === AI_MODES.LOCAL && !attachmentIds.length) {
-      const tokens = streamOllamaChat({
-        messages: chatMessages,
-        model: modelLabel,
-        temperature,
-      });
-      const result = await consumeTokenStream(tokens, onToken);
-      return persistMemory(result);
-    }
-
-    if (activeMode === AI_MODES.CLOUD && !attachmentIds.length) {
-      const tokens = streamAnthropicDirect({
-        messages: chatMessages,
-        maxTokens: max_tokens,
-      });
-      const result = await consumeTokenStream(tokens, onToken);
-      return persistMemory(result);
-    }
+      if (activeMode === AI_MODES.LOCAL && !attachmentIds.length) {
+        const tokens = streamOllamaChat({
+          messages: chatMessages,
+          model: modelLabel,
+          temperature,
+        });
+        const result = await consumeTokenStream(tokens, onToken);
+        return persistMemory(result);
+      }
 
       const backendUp = await canReachBackend();
       if (backendUp) {

@@ -1,11 +1,12 @@
 /**
- * Browser-side Anthropic fallback when the OWNAI backend is unreachable.
- * Requires VITE_ANTHROPIC_KEY at build time (GitHub secret — never commit keys).
+ * Browser-side Anthropic fallback — disabled in production builds.
+ * API keys must never be embedded in client bundles; use the backend instead.
  */
 
 const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 
 export function hasAnthropicDirect() {
+  if (import.meta.env.PROD) return false;
   return Boolean(import.meta.env.VITE_ANTHROPIC_KEY?.trim());
 }
 
@@ -47,6 +48,9 @@ async function anthropicFetch(body) {
 }
 
 export async function callAnthropicDirect(message, { maxTokens = 1024 } = {}) {
+  if (import.meta.env.PROD) {
+    throw new Error('Direct Anthropic access is disabled in production');
+  }
   const res = await anthropicFetch(buildAnthropicPayload({
     messages: [{ role: 'user', content: message }],
     maxTokens,
@@ -57,6 +61,9 @@ export async function callAnthropicDirect(message, { maxTokens = 1024 } = {}) {
 }
 
 export async function* streamAnthropicDirect({ messages = [], maxTokens = 1024 }) {
+  if (import.meta.env.PROD) {
+    throw new Error('Direct Anthropic access is disabled in production');
+  }
   const res = await anthropicFetch(buildAnthropicPayload({ messages, maxTokens, stream: true }));
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
