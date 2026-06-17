@@ -284,14 +284,14 @@ export default function AppLayout({ theme, onToggleTheme }) {
       </div>
 
       <main className="relative flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-4 py-2 dark:border-slate-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-stone-200/80 px-4 py-2.5 dark:border-slate-800">
           <button
             type="button"
             onClick={() => {
               setSidebarOpen(true);
               setSidebarCollapsed(false);
             }}
-            className="rounded-lg p-2 text-slate-600 hover:bg-stone-200 md:hidden dark:text-slate-300 dark:hover:bg-slate-800"
+              className="rounded-lg p-2 text-slate-600 hover:bg-stone-200 md:hidden dark:text-slate-300 dark:hover:bg-slate-800"
             aria-label="Open sidebar"
           >
             ☰
@@ -305,7 +305,7 @@ export default function AppLayout({ theme, onToggleTheme }) {
             <button
               type="button"
               onClick={onToggleTheme}
-              className="rounded-lg px-3 py-1.5 text-xs text-slate-600 hover:bg-stone-200 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-stone-200 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>

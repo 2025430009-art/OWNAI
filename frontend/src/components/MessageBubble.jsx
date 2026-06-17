@@ -160,9 +160,11 @@ export default function MessageBubble({
         }`}
       >
         <div className="mb-1.5 flex flex-wrap items-center gap-2">
-          <p className={`text-xs font-medium ${isUser ? 'text-teal-100' : 'text-slate-500 dark:text-slate-400'}`}>
-            {isUser ? 'You' : 'OWNAI'}
-          </p>
+          {!isUser && (
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              OWNAI
+            </p>
+          )}
           {!isUser && mode && (
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${MODE_COLORS[mode] || MODE_COLORS['FAST MODE']}`}>
               {mode}
@@ -185,7 +187,7 @@ export default function MessageBubble({
             </button>
           )}
         </div>
-        <div className={`text-sm leading-relaxed ${isUser ? 'whitespace-pre-wrap' : ''}`}>
+        <div className={`text-[15px] leading-relaxed ${isUser ? 'whitespace-pre-wrap' : ''}`}>
           {!isUser && (
             <ThinkingBlock
               thinking={thinking}

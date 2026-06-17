@@ -34,14 +34,14 @@ export default function ChatView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="shrink-0 border-b border-stone-200 px-6 py-3 dark:border-slate-800">
-        <h2 className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+      <header className="shrink-0 border-b border-stone-200/80 px-6 py-4 dark:border-slate-800">
+        <h2 className="truncate text-base font-semibold text-slate-800 dark:text-slate-100">
           {session.title || 'New conversation'}
         </h2>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
-        <div className="mx-auto max-w-3xl space-y-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-8 sm:px-8">
+        <div className="mx-auto max-w-4xl space-y-5">
           {session.messages.map((msg, i) => (
             <MessageBubble
               key={`${msg.timestamp || i}-${i}`}
