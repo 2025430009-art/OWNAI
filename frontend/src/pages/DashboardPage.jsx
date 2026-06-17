@@ -4,6 +4,7 @@ import WelcomePanel from '../components/dashboard/WelcomePanel.jsx';
 import ChatPanel from '../components/dashboard/ChatPanel.jsx';
 import PromptInput from '../components/dashboard/PromptInput.jsx';
 import DocumentUpload from '../components/DocumentUpload.jsx';
+import { getOwnaiSessionId, setOwnaiSessionId } from '../utils/sessionId.js';
 import SectionPanel from '../components/dashboard/SectionPanel.jsx';
 import ResearchPage from './ResearchPage.jsx';
 import useChatSessions from '../hooks/useChatSessions.js';
@@ -118,6 +119,7 @@ export default function DashboardPage({
     if ((!trimmed && attachments.length === 0) || loading) return;
 
     const sessionId = ensureSession();
+    setOwnaiSessionId(sessionId);
     setActiveSection('chat');
     setInput('');
     setLoading(true);
@@ -242,7 +244,7 @@ export default function DashboardPage({
       setAttachments((prev) => [...prev, ...(data.attachments || [])]);
       for (const file of files) {
         try {
-          await ingestRagDocument(file);
+          await ingestRagDocument(file, sessionId);
           setLoadedDocument(file.name);
         } catch {
           // RAG ingest optional when backend unavailable
@@ -392,7 +394,10 @@ export default function DashboardPage({
               }`}
             >
               <div className="mx-auto mb-2 flex max-w-2xl justify-center">
-                <DocumentUpload onUploaded={(name) => setLoadedDocument(name)} />
+                <DocumentUpload
+                  sessionId={activeId || getOwnaiSessionId()}
+                  onUploaded={(name) => setLoadedDocument(name)}
+                />
               </div>
               <PromptInput
                 value={input}

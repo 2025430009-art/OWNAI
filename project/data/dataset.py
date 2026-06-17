@@ -1,6 +1,89 @@
+import os
 import random
+from pathlib import Path
 
 from datasets import Dataset, load_dataset
+
+
+def _kaggle_token_path():
+    return Path.home() / ".kaggle" / "access_token"
+
+
+def ensure_kaggle_credentials():
+    """
+    Configure Kaggle auth from env or local files.
+    Supports (in order):
+      - KAGGLE_API_TOKEN (new KGAT_* tokens, Render)
+      - KAGGLE_USERNAME + KAGGLE_KEY (legacy kaggle.json fields)
+      - ~/.kaggle/access_token
+      - ~/.kaggle/kaggle.json
+    """
+    token_path = _kaggle_token_path()
+
+    if os.environ.get("KAGGLE_API_TOKEN"):
+        return True
+
+    if os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"):
+        return True
+
+    if token_path.is_file():
+        os.environ["KAGGLE_API_TOKEN"] = token_path.read_text(encoding="utf-8").strip()
+        return bool(os.environ["KAGGLE_API_TOKEN"])
+
+    legacy = Path.home() / ".kaggle" / "kaggle.json"
+    if legacy.is_file():
+        return True
+
+    return False
+
+
+def init_kaggle_env():
+    """Call before `import kaggle` — mirrors Render env-var setup."""
+    os.environ.setdefault("KAGGLE_USERNAME", os.getenv("KAGGLE_USERNAME", ""))
+    os.environ.setdefault("KAGGLE_KEY", os.getenv("KAGGLE_KEY", ""))
+    ensure_kaggle_credentials()
+
+
+def download_kaggle_dataset(slug, dest_dir="data/kaggle_cache"):
+    """Download and unzip a Kaggle dataset. slug format: owner/dataset-name"""
+    init_kaggle_env()
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    api = KaggleApi()
+    api.authenticate()
+    print(f"Downloading Kaggle dataset: {slug} → {dest}")
+    api.dataset_download_files(slug, path=str(dest), unzip=True, quiet=False)
+    return dest
+
+
+def load_kaggle_text_dataset(slug, text_column="text", dest_dir="data/kaggle_cache"):
+    """Download from Kaggle and load as a HuggingFace Dataset with a text column."""
+    cache = download_kaggle_dataset(slug, dest_dir=dest_dir)
+    texts = []
+    for path in sorted(cache.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in {".txt", ".csv", ".tsv", ".json", ".jsonl"}:
+            continue
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+        if path.suffix.lower() == ".csv":
+            for line in raw.splitlines()[1:]:
+                part = line.split(",", 1)[-1].strip().strip('"')
+                if part:
+                    texts.append(part)
+        else:
+            for line in raw.splitlines():
+                line = line.strip()
+                if line:
+                    texts.append(line)
+        if texts:
+            break
+    if not texts:
+        raise RuntimeError(f"No text files found after downloading Kaggle dataset {slug}")
+    print(f"✓ Loaded {len(texts):,} lines from Kaggle dataset {slug}")
+    return Dataset.from_dict({text_column: texts})
 
 
 def _synthetic_dataset():
@@ -26,8 +109,20 @@ def _synthetic_dataset():
     return ds
 
 
-def load_books_like_dataset(dataset_name="bookcorpus", split="train"):
-    print(f"Loading dataset: {dataset_name}")
+def load_books_like_dataset(
+    dataset_name="bookcorpus",
+    split="train",
+    source="huggingface",
+    kaggle_dataset=None,
+):
+    print(f"Loading dataset: {dataset_name} (source={source})")
+
+    if source == "kaggle" and kaggle_dataset:
+        try:
+            return load_kaggle_text_dataset(kaggle_dataset)
+        except Exception as err:
+            print(f"⚠️ Kaggle download failed ({err}); falling back to HuggingFace…")
+
     candidates = [dataset_name, "bookcorpus", "wikitext"]
     for candidate in candidates:
         try:

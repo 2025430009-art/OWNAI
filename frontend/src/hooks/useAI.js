@@ -3,17 +3,20 @@ import { generateText, chatWithAttachments, queryRag, thinkMessage } from '../ap
 import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
 import { runHumanThinkPipeline } from '../utils/humanThinkPipeline.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
-import { streamPromptResponse } from '../utils/promptEngine.js';
+import { streamFallbackChat } from '../utils/fallbackChat.js';
+import { streamAnthropicDirect } from '../utils/anthropicDirect.js';
 import { buildChatMessages, resolveHistory } from '../utils/memory.js';
 import ownaiMemory from '../utils/ownaiMemory.js';
 import { detectTask } from '../utils/modelRouter.js';
 import { apiModeFromUiId, shouldUseThinkEndpoint } from '../constants/thinkingModes.js';
+import { getOwnaiSessionId } from '../utils/sessionId.js';
 import {
   detectAIMode,
   AI_MODES,
   getModeLabel,
   friendlyAIError,
   canReachBackend,
+  USER_UNAVAILABLE_MSG,
 } from '../utils/apiConfig.js';
 
 async function consumeTokenStream(tokenStream, onToken) {
@@ -70,10 +73,11 @@ export default function useAI() {
     model_key,
     algorithm_id,
     attachmentIds = [],
-    sessionId,
+    sessionId: sessionIdParam,
     useRag = true,
     thinkingModeUi = 'auto',
   }) => {
+    const sessionId = sessionIdParam || getOwnaiSessionId();
     let activeMode = mode;
     if (!modeReady) {
       activeMode = await refreshMode();
@@ -85,9 +89,10 @@ export default function useAI() {
     const resolvedHistory = history.length ? history.slice(-10) : resolveHistory([]);
 
     let ragContext = '';
+    const ragSessionId = sessionId;
     if (useRag && !attachmentIds.length && await canReachBackend()) {
       try {
-        const rag = await queryRag(prompt);
+        const rag = await queryRag(prompt, 4, ragSessionId);
         ragContext = rag.context || '';
       } catch {
         // optional
@@ -106,8 +111,10 @@ export default function useAI() {
       modelLabel = await resolveOllamaModel(task.model);
     } else if (activeMode === AI_MODES.BACKEND) {
       modelLabel = model_key || 'QVAC Llama 3.2';
+    } else if (activeMode === AI_MODES.CLOUD) {
+      modelLabel = 'claude-sonnet-4-6';
     } else {
-      modelLabel = 'prompt-engine';
+      modelLabel = 'OWNAI';
     }
     setActiveModel(modelLabel);
 
@@ -124,15 +131,24 @@ export default function useAI() {
     };
 
     try {
-      if (activeMode === AI_MODES.LOCAL && !attachmentIds.length) {
-        const tokens = streamOllamaChat({
-          messages: chatMessages,
-          model: modelLabel,
-          temperature,
-        });
-        const result = await consumeTokenStream(tokens, onToken);
-        return persistMemory(result);
-      }
+    if (activeMode === AI_MODES.LOCAL && !attachmentIds.length) {
+      const tokens = streamOllamaChat({
+        messages: chatMessages,
+        model: modelLabel,
+        temperature,
+      });
+      const result = await consumeTokenStream(tokens, onToken);
+      return persistMemory(result);
+    }
+
+    if (activeMode === AI_MODES.CLOUD && !attachmentIds.length) {
+      const tokens = streamAnthropicDirect({
+        messages: chatMessages,
+        maxTokens: max_tokens,
+      });
+      const result = await consumeTokenStream(tokens, onToken);
+      return persistMemory(result);
+    }
 
       const backendUp = await canReachBackend();
       if (backendUp) {
@@ -221,17 +237,23 @@ export default function useAI() {
       }
 
       if (attachmentIds.length) {
-        const msg = 'File attachments need the OWNAI backend. Connect a backend or run locally without attachments.';
+        const msg = USER_UNAVAILABLE_MSG;
         await consumeTokenStream((async function* () { yield msg; }()), onToken);
         return { content: msg, model: modelLabel, mode: task.mode };
       }
 
       setMode(AI_MODES.STATIC);
-      const result = await consumeTokenStream(streamPromptResponse(prompt), onToken);
+      if (ragContext?.trim()) {
+        throw new Error(USER_UNAVAILABLE_MSG);
+      }
+      const result = await consumeTokenStream(
+        streamFallbackChat({ prompt, chatMessages, maxTokens: max_tokens }),
+        onToken,
+      );
       return persistMemory(result);
     } catch (error) {
       if (attachmentIds.length) {
-        throw new Error('Could not process attachments. Connect the OWNAI backend.');
+        throw new Error(USER_UNAVAILABLE_MSG);
       }
       const msg = error?.message || '';
       const canUseOfflineFallback = /backend not connected|unreachable|timed out|failed to fetch|502|503|404|health check/i.test(msg);
@@ -239,8 +261,14 @@ export default function useAI() {
         throw new Error(friendlyAIError(error));
       }
       try {
+        if (ragContext?.trim()) {
+          throw error;
+        }
         setMode(AI_MODES.STATIC);
-        const result = await consumeTokenStream(streamPromptResponse(prompt), onToken);
+        const result = await consumeTokenStream(
+          streamFallbackChat({ prompt, chatMessages, maxTokens: max_tokens }),
+          onToken,
+        );
         return persistMemory(result);
       } catch {
         throw new Error(friendlyAIError(error));

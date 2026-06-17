@@ -25,7 +25,12 @@ training:
   fp16: false
   bf16: false
 data:
-  dataset_name: bookcorpus
+  # huggingface | kaggle
+  source: kaggle
+  dataset_name: wikitext
+  # Kaggle slug when source=kaggle (owner/dataset)
+  kaggle_dataset: divyanshuranjan009/mathematical-science
+  kaggle_file: null
   text_column: text
   context_window: 512
   tokenizer_sample_size: 200000

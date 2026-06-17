@@ -2,8 +2,9 @@ import { config } from '../config/index.js';
 
 function getSessionId(req) {
   return req.headers['x-session-id']?.toString()
-    || req.query?.session_id?.toString()
+    || req.body?.sessionId?.toString()
     || req.body?.session_id?.toString()
+    || req.query?.session_id?.toString()
     || null;
 }
 

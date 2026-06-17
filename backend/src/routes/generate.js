@@ -4,7 +4,7 @@ import { inferenceAuth } from '../middleware/auth.js';
 import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
 import { applyAlgorithm } from '../services/algorithmService.js';
 import { buildConversationHistory } from '../utils/conversationHistory.js';
-import { buildRagContext, augmentPromptWithRag } from '../rag/ragChain.js';
+import { buildRagContext, augmentPromptWithRag, buildRagSystemPrompt } from '../rag/ragChain.js';
 import { resolveRagNamespace } from '../rag/namespace.js';
 import { applyResearchChatAugmentation } from '../research/ragIntegration.js';
 import { enrichWithResearchContext } from '../research/researchChatContext.js';
@@ -24,7 +24,27 @@ import {
 
 const router = Router();
 
-router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), async (req, res, next) => {
+router.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    endpoint: '/api/v1/generate',
+    method: 'POST',
+    aliases: ['/api/v1/chat'],
+    description: 'OWNAI text generation — supports RAG, streaming SSE, and thinking modes.',
+    health: '/api/v1/health',
+    docs: '/api-docs',
+    hint: 'Send POST with JSON body { "prompt": "...", "stream": true, "use_rag": true }.',
+    example: {
+      prompt: 'Summarize my uploaded document',
+      stream: true,
+      use_rag: true,
+      max_tokens: 512,
+      enable_thinking: true,
+    },
+  });
+});
+
+async function handleGenerate(req, res, next) {
   const {
     prompt,
     messages,
@@ -49,15 +69,9 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), 
       finalPrompt = researchPrefix + finalPrompt;
     }
 
-    let conversationHistory;
     const ragNamespace = resolveRagNamespace(req);
-    const shouldUseRag = use_rag !== false;
-    if (shouldUseRag) {
-      const ragContext = await buildRagContext(finalPrompt, 3, ragNamespace).catch(() => null);
-      conversationHistory = augmentPromptWithRag(finalPrompt, ragContext, messages || []);
-    } else {
-      conversationHistory = buildConversationHistory(messages || [], finalPrompt);
-    }
+    const ragContext = await buildRagContext(finalPrompt, 4, ragNamespace).catch(() => null);
+    let conversationHistory = augmentPromptWithRag(finalPrompt, ragContext, messages || []);
 
     if (req.user?.id) {
       conversationHistory = await applyResearchChatAugmentation(
@@ -76,6 +90,8 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), 
     const thinkingContext = {
       hasResearchContext: Boolean(researchPrefix),
       isResearch: Boolean(researchPrefix),
+      ragContext: ragContext || '',
+      ragSystemPrompt: buildRagSystemPrompt(ragContext),
     };
 
     const generationParams = {
@@ -174,6 +190,8 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), 
     res.write('data: [DONE]\n\n');
     res.end();
   }
-});
+}
+
+router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), handleGenerate);
 
 export default router;

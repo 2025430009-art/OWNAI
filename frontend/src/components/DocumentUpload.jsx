@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { ingestRagDocument, uploadDocument } from '../api/client.js';
+import { getOwnaiSessionId } from '../utils/sessionId.js';
 
-export default function DocumentUpload({ onUploaded, className = '' }) {
+export default function DocumentUpload({ onUploaded, sessionId, className = '' }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [loadedFile, setLoadedFile] = useState(null);
@@ -12,14 +13,15 @@ export default function DocumentUpload({ onUploaded, className = '' }) {
     e.target.value = '';
     if (!file) return;
 
+    const sid = sessionId || getOwnaiSessionId();
     setUploading(true);
     setError('');
     try {
       let data;
       try {
-        data = await uploadDocument(file);
+        data = await uploadDocument(file, sid);
       } catch {
-        data = await ingestRagDocument(file);
+        data = await ingestRagDocument(file, sid);
       }
       const name = data.filename || file.name;
       setLoadedFile(name);

@@ -16,6 +16,8 @@ temp/*
 output/*
 !output/.gitkeep
 backend/data/prompt-to-video-jobs.json
+backend/data/rag-engine-store.json
+backend/data/rag-store.json
 .backend-port
 models/*.gguf
 !models/.gitkeep
@@ -31,3 +33,5 @@ project/outputs/
 project/**/__pycache__/
 project/**/*.pyc
 project/data/dataset.py.original
+project/data/kaggle_cache/
+project/datasets/

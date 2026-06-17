@@ -4,6 +4,7 @@
 import { OWNAI_SYSTEM_PROMPT } from '../config/personality.js';
 import ownaiMemory from './ownaiMemory.js';
 import { buildThinkPrompt } from './chainOfThoughtClient.js';
+import { buildRagUserPrompt, buildRagSystemMessage } from './ragPrompt.js';
 
 export function getSessionContext(messages = []) {
   return messages
@@ -28,11 +29,15 @@ export function buildChatMessages({
 }) {
   const userContext = includeMemory ? ownaiMemory.buildContext() + userPrompt : userPrompt;
   const enriched = ragContext
-    ? `Context from my documents:\n${ragContext}\n\nQuestion: ${userContext}`
+    ? buildRagUserPrompt(userContext, ragContext)
     : userContext;
 
-  const useCoT = taskMode === 'THINK MODE' || taskMode === 'DEEP MODE';
+  const useCoT = !ragContext && (taskMode === 'THINK MODE' || taskMode === 'DEEP MODE');
   const finalUser = useCoT ? buildThinkPrompt(enriched) : enriched;
+
+  const systemContent = ragContext
+    ? buildRagSystemMessage(ragContext)
+    : OWNAI_SYSTEM_PROMPT;
 
   const turns = [...history];
   const last = turns[turns.length - 1];
@@ -41,7 +46,7 @@ export function buildChatMessages({
   }
 
   return [
-    { role: 'system', content: OWNAI_SYSTEM_PROMPT },
+    { role: 'system', content: systemContent },
     ...turns.slice(-6),
   ];
 }

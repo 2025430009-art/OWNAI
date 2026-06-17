@@ -57,7 +57,11 @@ def main(config_path):
     os.makedirs(cfg["output_dir"], exist_ok=True)
     run_name = make_run_id(cfg.get("run_name_prefix", "pt"))
     tokenizer_path = cfg.get("tokenizer_path", f"{cfg['output_dir']}/tokenizer.json")
-    raw_ds = load_books_like_dataset(cfg["data"]["dataset_name"])
+    raw_ds = load_books_like_dataset(
+        dataset_name=cfg["data"]["dataset_name"],
+        source=cfg["data"].get("source", "huggingface"),
+        kaggle_dataset=cfg["data"].get("kaggle_dataset"),
+    )
     text_col = cfg["data"].get("text_column", "text")
 
     if not os.path.exists(tokenizer_path):

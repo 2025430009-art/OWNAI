@@ -187,15 +187,22 @@ export async function runThinkingGeneration({
   context = {},
   onEvent,
 }) {
-  const reasoningEnabled = ENABLE_REASONING;
+  const reasoningEnabled = ENABLE_REASONING && !context.ragContext;
   const effectiveReasoningMode = reasoningEnabled ? reasoningMode : 'direct';
 
   const resolved = resolveThinkingMode(prompt, effectiveReasoningMode, context);
-  const mode = reasoningEnabled ? resolved.mode : THINKING_MODES.DIRECT;
-  const reasoningSystem = reasoningEnabled ? buildReasoningSystemPrompt(mode) : '';
-  const modePrompt = reasoningEnabled
-    ? buildPromptForMode(mode, prompt, context, context.tools || [])
-    : prompt;
+  const mode = context.ragContext
+    ? THINKING_MODES.DIRECT
+    : (reasoningEnabled ? resolved.mode : THINKING_MODES.DIRECT);
+  const ragSystem = context.ragSystemPrompt || '';
+  const reasoningSystem = reasoningEnabled
+    ? [ragSystem, buildReasoningSystemPrompt(mode)].filter(Boolean).join('\n\n')
+    : ragSystem;
+  const modePrompt = context.ragContext
+    ? prompt
+    : (reasoningEnabled
+      ? buildPromptForMode(mode, prompt, context, context.tools || [])
+      : prompt);
 
   onEvent?.(buildModeMeta(resolved, {
     provider: ANTHROPIC_KEY ? 'anthropic' : (ENABLE_QVAC ? 'qvac' : 'ollama'),

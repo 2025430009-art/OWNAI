@@ -180,7 +180,7 @@ export async function ingestDocument(filePath, filename, namespace = null) {
           ids: [`${filename}_${i}_${Date.now()}`],
           embeddings: [embedding],
           documents: [chunks[i]],
-          metadatas: [{ source: filename, chunk: i, namespace: ns }],
+          metadatas: [{ source: filename, chunk: i, namespace: ns, sessionId: ns }],
         });
       }
 
@@ -199,26 +199,33 @@ export async function ingestDocument(filePath, filename, namespace = null) {
 /**
  * Query: embed question → find similar chunks
  */
-export async function queryDocuments(question, topK = 3, namespace = null) {
+export async function queryDocuments(question, topK = 4, namespace = null) {
   const ns = resolveNamespace(namespace);
 
-  try {
-    const chroma = await getChromaClient();
-    if (chroma) {
-      const collection = await chroma.getOrCreateCollection({ name: collectionName(ns) });
-      const embedding = await embedText(question);
-      const results = await collection.query({
-        queryEmbeddings: [embedding],
-        nResults: topK,
-      });
-      const docs = results.documents?.[0]?.filter(Boolean) || [];
-      if (docs.length) return docs.join('\n\n---\n\n');
+  async function queryScoped(scopeNs) {
+    try {
+      const chroma = await getChromaClient();
+      if (chroma) {
+        const collection = await chroma.getOrCreateCollection({ name: collectionName(scopeNs) });
+        const embedding = await embedText(question);
+        const results = await collection.query({
+          queryEmbeddings: [embedding],
+          nResults: topK,
+        });
+        const docs = results.documents?.[0]?.filter(Boolean) || [];
+        if (docs.length) return docs.join('\n\n---\n\n');
+      }
+    } catch {
+      // fall through
     }
-  } catch {
-    // fall through to memory store
+    return queryMemory(question, topK, scopeNs);
   }
 
-  return queryMemory(question, topK, ns);
+  let result = await queryScoped(ns);
+  if (!result && ns !== 'global') {
+    result = await queryScoped('global');
+  }
+  return result || null;
 }
 
 /** List ingested document filenames */
@@ -259,11 +266,44 @@ export async function clearDocuments(namespace = null) {
 
 export function buildRagPrompt(userMessage, ragContext) {
   if (!ragContext?.trim()) return userMessage;
-  return `Use this context from uploaded documents to answer the question.
-If the context doesn't help, answer from your own knowledge.
 
-CONTEXT:
+  const formatHints = {
+    latex: 'Convert the document content to proper LaTeX with \\documentclass, sections, and formatting. Output complete LaTeX only — no placeholders.',
+    summarize: 'Write a clear, accurate summary of the document content below.',
+    translate: 'Translate the document content as requested by the user.',
+    table: 'Extract data from the document and format it as a readable table.',
+  };
+
+  const lower = userMessage.toLowerCase();
+  const formatKey = Object.keys(formatHints).find((k) => lower.includes(k));
+  const formatInstruction = formatHints[formatKey]
+    || 'Answer the user request using ONLY the document content below. Do NOT return placeholder code, TODO comments, or generic templates.';
+
+  return `You are OWNAI. The user has uploaded documents.
+${formatInstruction}
+Use the following extracted content to answer their request EXACTLY.
+If they ask to convert to LaTeX, convert the ACTUAL content below to LaTeX.
+If they ask to summarize, summarize the ACTUAL content below.
+Never return placeholder code with TODO comments.
+
+===== DOCUMENT CONTENT =====
 ${ragContext}
+===========================
 
-USER QUESTION: ${userMessage}`;
+USER REQUEST: ${userMessage}`;
+}
+
+export function buildRagSystemPrompt(ragContext) {
+  if (!ragContext?.trim()) {
+    return `You are OWNAI, an advanced AI assistant.
+Answer the user's request directly and completely.
+Never return placeholder code with TODO comments.
+Always provide complete, working responses.`;
+  }
+
+  return `You are OWNAI. The user has uploaded documents.
+Use the extracted document content provided in the user message to answer EXACTLY.
+Do NOT return placeholder code. Do NOT return TODO comments.
+If they ask for LaTeX, output real LaTeX from the document content.
+If they ask to summarize, summarize the actual uploaded document.`;
 }

@@ -14,7 +14,7 @@ export const generateSchema = z.object({
   model_src: z.string().optional(),
   algorithm_id: z.string().optional(),
   stream: z.boolean().optional().default(true),
-  use_rag: z.boolean().optional().default(false),
+  use_rag: z.boolean().optional().default(true),
   reasoning_mode: z.enum([
     'auto',
     'direct',

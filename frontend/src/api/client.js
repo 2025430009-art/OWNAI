@@ -8,6 +8,7 @@ import {
   probeBackend,
   SIGNIN_REQUIRES_BACKEND_MSG,
 } from '../utils/apiConfig.js';
+import { getOwnaiSessionId } from '../utils/sessionId.js';
 
 export {
   isStaticHosting,
@@ -47,9 +48,15 @@ async function parseJsonResponse(response) {
 }
 
 function apiFetch(path, options = {}) {
+  const sessionId = options.sessionId || getOwnaiSessionId();
+  const headers = new Headers(options.headers || {});
+  if (sessionId && !headers.has('x-session-id')) {
+    headers.set('x-session-id', sessionId);
+  }
   return fetch(apiUrl(path), {
     credentials: 'include',
     ...options,
+    headers,
   });
 }
 
@@ -93,13 +100,15 @@ export async function generateText({
   return parseJsonResponse(response);
 }
 
-export async function queryRag(question, top_k = 3) {
+export async function queryRag(question, top_k = 4, sessionId) {
+  const sid = sessionId || getOwnaiSessionId();
   const response = await apiFetch('/api/v1/rag/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ question, top_k }),
+    body: JSON.stringify({ question, top_k, session_id: sid }),
+    sessionId: sid,
   });
   if (!response.ok) {
     const error = await parseJsonResponse(response).catch(() => ({}));
@@ -108,13 +117,16 @@ export async function queryRag(question, top_k = 3) {
   return parseJsonResponse(response);
 }
 
-export async function ingestRagDocument(file) {
+export async function ingestRagDocument(file, sessionId) {
   requireBackend();
   const form = new FormData();
   form.append('file', file);
+  const sid = sessionId || getOwnaiSessionId();
+  form.append('sessionId', sid);
   const response = await apiFetch('/api/v1/rag/ingest', {
     method: 'POST',
     body: form,
+    sessionId: sid,
   });
   if (!response.ok) {
     const error = await parseJsonResponse(response).catch(() => ({}));
@@ -123,13 +135,16 @@ export async function ingestRagDocument(file) {
   return parseJsonResponse(response);
 }
 
-export async function uploadDocument(file) {
+export async function uploadDocument(file, sessionId) {
   requireBackend();
   const form = new FormData();
   form.append('file', file);
+  const sid = sessionId || getOwnaiSessionId();
+  form.append('sessionId', sid);
   const response = await apiFetch('/api/v1/documents/upload', {
     method: 'POST',
     body: form,
+    sessionId: sid,
   });
   if (!response.ok) {
     const error = await parseJsonResponse(response).catch(() => ({}));
@@ -492,6 +507,7 @@ export async function thinkMessage({
       stream: stream !== false,
       use_extended_thinking,
     }),
+    sessionId,
   });
 
   if (!response.ok) {

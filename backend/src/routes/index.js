@@ -21,6 +21,20 @@ import documentsRouter from './documents.js';
 
 const router = Router();
 
+router.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    name: 'OWNAI API v1',
+    health: '/api/v1/health',
+    generate: { method: 'POST', path: '/api/v1/generate' },
+    chat: { method: 'POST', path: '/api/v1/chat', note: 'Alias for /generate' },
+    think: { method: 'POST', path: '/api/v1/think' },
+    documents: { method: 'POST', path: '/api/v1/documents/upload' },
+    rag: { method: 'POST', path: '/api/v1/rag/query' },
+    docs: '/api-docs',
+  });
+});
+
 router.get('/health', async (_req, res) => {
   const ollama = await isOllamaAvailable();
   res.json({
@@ -34,6 +48,7 @@ router.get('/health', async (_req, res) => {
 });
 
 router.use('/generate', generateRouter);
+router.use('/chat', generateRouter);
 router.use('/auth', authRouter);
 router.use('/models', modelsRouter);
 router.use('/capabilities', capabilitiesRouter);

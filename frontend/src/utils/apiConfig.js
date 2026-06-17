@@ -1,26 +1,8 @@
 import { isOllamaAvailable } from './ollamaClient.js';
+import { hasAnthropicDirect } from './anthropicDirect.js';
 
 const STORAGE_KEY = 'ownai_api_url';
-const BUILT_IN = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '') || '';
 export const DEFAULT_LOCAL_API_URL = 'http://localhost:3000';
-
-export const AI_MODES = {
-  LOCAL: 'local',
-  BACKEND: 'backend',
-  STATIC: 'static',
-};
-
-export const MODE_LABELS = {
-  [AI_MODES.LOCAL]: 'Local — Ollama',
-  [AI_MODES.BACKEND]: 'Backend — OWNAI API',
-  [AI_MODES.STATIC]: 'Offline — prompt engine',
-};
-
-export const BACKEND_NOT_CONNECTED_MSG =
-  'Backend not connected. Chat works offline — connect a backend URL above, or run the server locally (cd backend && npm run start).';
-
-export const SIGNIN_REQUIRES_BACKEND_MSG =
-  'Sign-in requires the OWNAI backend. Connect a backend URL or run it locally: cd backend && npm run start';
 
 export function normalizeApiUrl(url) {
   const trimmed = url?.trim();
@@ -33,6 +15,30 @@ export function normalizeApiUrl(url) {
     return '';
   }
 }
+
+const BUILT_IN = normalizeApiUrl(import.meta.env.VITE_API_URL) || '';
+
+export const AI_MODES = {
+  LOCAL: 'local',
+  BACKEND: 'backend',
+  CLOUD: 'cloud',
+  STATIC: 'static',
+};
+
+export const MODE_LABELS = {
+  [AI_MODES.LOCAL]: 'Local — Ollama',
+  [AI_MODES.BACKEND]: 'Backend — OWNAI API',
+  [AI_MODES.CLOUD]: 'Cloud — OWNAI',
+  [AI_MODES.STATIC]: 'OWNAI',
+};
+
+export const USER_UNAVAILABLE_MSG =
+  'OWNAI is currently starting up. Please try again in a moment.';
+
+export const BACKEND_NOT_CONNECTED_MSG = USER_UNAVAILABLE_MSG;
+
+export const SIGNIN_REQUIRES_BACKEND_MSG =
+  'Sign-in is temporarily unavailable. Please try again in a moment.';
 
 export function isLocalDev() {
   if (typeof window === 'undefined') return false;
@@ -80,10 +86,7 @@ export function apiUrl(path) {
 }
 
 export function getBackendUnavailableMessage() {
-  if (isStaticHosting() && !getApiBase()) {
-    return BACKEND_NOT_CONNECTED_MSG;
-  }
-  return 'Backend not connected. Please run the backend server locally: cd backend && npm run start';
+  return USER_UNAVAILABLE_MSG;
 }
 
 /** Alias used by architecture spec */
@@ -113,8 +116,7 @@ export function isStaticHosting() {
 }
 
 export function getApiStatusMessage() {
-  if (!isStaticHosting()) return null;
-  return 'Running on GitHub Pages (UI only). Chat works offline — connect a backend for sign-in and full AI.';
+  return null;
 }
 
 export function healthUrl(base = getApiBase()) {
@@ -158,55 +160,71 @@ export async function probeBackend(baseUrl = getApiBase()) {
     response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
     text = await response.text();
   } catch {
-    throw new Error(
-      isRemote
-        ? 'Backend unreachable. Render may still be starting (free tier: wait 30–60s) or the service is not deployed yet.'
-        : 'Backend unreachable. Start it with: cd backend && npm run start',
-    );
+    throw new Error(USER_UNAVAILABLE_MSG);
   }
 
   if (!response.ok && text.trim() === 'Not Found') {
-    throw new Error(
-      'No server at this URL yet. In Render, confirm the service is Live and copy the exact URL from the dashboard.',
-    );
+    throw new Error(USER_UNAVAILABLE_MSG);
   }
 
   if (text.trimStart().startsWith('<')) {
-    throw new Error('Backend returned a web page instead of API data. Check the URL.');
+    throw new Error(USER_UNAVAILABLE_MSG);
   }
 
   let data;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('Backend did not return JSON. The API may not be running on this URL.');
+    throw new Error(USER_UNAVAILABLE_MSG);
   }
 
   if (!response.ok || !data.success) {
-    throw new Error('Backend health check failed');
+    throw new Error(USER_UNAVAILABLE_MSG);
   }
   return data;
 }
 
-export async function canReachBackend() {
-  if (!hasBackendConfigured()) return false;
+/** Quiet health ping — no user-facing errors. */
+async function pingBackend(baseUrl = getApiBase()) {
+  if (!baseUrl && !hasBackendConfigured()) return false;
+  const url = baseUrl ? `${baseUrl}/api/v1/health` : '/api/v1/health';
+  const isRemote = baseUrl && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(baseUrl);
+  const timeoutMs = isRemote ? 60000 : 4000;
+
   try {
-    await probeBackend();
-    return true;
+    const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.success === true;
   } catch {
     return false;
   }
 }
 
+export async function canReachBackend(retries = 3) {
+  if (!hasBackendConfigured()) return false;
+
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    if (await pingBackend(getApiBase())) return true;
+    if (attempt < retries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+  return false;
+}
+
 /**
- * Detect best available AI mode: Ollama → backend → static prompt engine.
+ * Detect best available AI mode: backend → Ollama (local dev) → Anthropic direct → static.
  */
 export async function detectAIMode() {
+  if (await canReachBackend(3)) {
+    return AI_MODES.BACKEND;
+  }
   if (isLocalDev() && await isOllamaAvailable()) {
     return AI_MODES.LOCAL;
   }
-  if (await canReachBackend()) {
-    return AI_MODES.BACKEND;
+  if (hasAnthropicDirect()) {
+    return AI_MODES.CLOUD;
   }
   return AI_MODES.STATIC;
 }
@@ -215,20 +233,18 @@ export function getModeLabel(mode) {
   return MODE_LABELS[mode] || MODE_LABELS[AI_MODES.STATIC];
 }
 
-/** User-friendly error — never expose raw HTTP codes */
+/** User-friendly error — never expose dev instructions or raw HTTP codes */
 export function friendlyAIError(error) {
   const msg = error?.message || '';
   if (/authentication required|401|invalid or expired token/i.test(msg)) {
-    return 'Backend connected but chat is blocked (auth). On Render set ALLOW_PUBLIC_INFERENCE=true and redeploy.';
+    return USER_UNAVAILABLE_MSG;
   }
-  if (/405|404|502|503|failed to fetch|network/i.test(msg)) {
-    return getBackendUnavailableMessage();
+  if (/405|404|502|503|failed to fetch|network|backend|health|not connected|unreachable|timed out|ollama/i.test(msg)) {
+    return USER_UNAVAILABLE_MSG;
   }
-  if (/ollama/i.test(msg)) {
-    return 'Ollama is not running. Start it with: ollama serve';
+  if (/cd backend|npm start|install ollama|offline mode|connect the ownai backend/i.test(msg)) {
+    return USER_UNAVAILABLE_MSG;
   }
-  if (/backend|health|not connected/i.test(msg)) {
-    return getBackendUnavailableMessage();
-  }
-  return msg.replace(/^Request failed: \d+\s*/i, '') || 'Something went wrong. Please try again.';
+  const cleaned = msg.replace(/^Request failed: \d+\s*/i, '').trim();
+  return cleaned || USER_UNAVAILABLE_MSG;
 }

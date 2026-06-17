@@ -5,7 +5,7 @@ import {
   canReachBackend,
   hasBackendConfigured,
   SIGNIN_REQUIRES_BACKEND_MSG,
-  getApiStatusMessage,
+  USER_UNAVAILABLE_MSG,
 } from '../utils/apiConfig.js';
 
 export default function AuthForm({ onAuth }) {
@@ -44,7 +44,7 @@ export default function AuthForm({ onAuth }) {
     }
   };
 
-  const statusMessage = getApiStatusMessage();
+  const statusMessage = null;
 
   return (
     <div className="card p-6 max-w-md mx-auto">
@@ -62,9 +62,8 @@ export default function AuthForm({ onAuth }) {
       )}
 
       {backendOnline === false && hasBackendConfigured() && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          Backend not connected. Please run the backend server locally:{' '}
-          <code className="text-xs">cd backend && npm run start</code>
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          {USER_UNAVAILABLE_MSG}
         </div>
       )}
 

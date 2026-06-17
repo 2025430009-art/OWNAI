@@ -7,7 +7,6 @@ import {
   buildRagPrompt,
 } from './ragEngine.js';
 import { ingestDocument as legacyIngest } from './vectorStore.js';
-import { OWNAI_SYSTEM_PROMPT } from '../config/personality.js';
 import { buildConversationHistory } from '../utils/conversationHistory.js';
 import { vectorStore } from './vectorStore.js';
 
@@ -26,12 +25,6 @@ export async function buildRagContext(question, topK = 3, namespace = null) {
 export function augmentPromptWithRag(userMessage, ragContext, messages = []) {
   const enriched = buildRagPrompt(userMessage, ragContext);
   return buildConversationHistory(messages, enriched);
-}
-
-export function buildRagSystemPrompt() {
-  return `${OWNAI_SYSTEM_PROMPT}
-
-When document context is provided, prioritize it over general knowledge. Cite the source document when relevant.`;
 }
 
 export async function ragStatus(namespace = null) {
@@ -65,4 +58,4 @@ export async function ingestDocument(filename, texts, namespace = null) {
   return legacyIngest(filename, texts, namespace);
 }
 
-export { listDocuments, buildRagPrompt };
+export { listDocuments, buildRagPrompt, buildRagSystemPrompt } from './ragEngine.js';

@@ -25,7 +25,7 @@ import {
 } from '../services/thinkingLogService.js';
 import { logUsage } from '../db/index.js';
 import { logger } from '../utils/logger.js';
-import { buildRagContext, buildRagPrompt } from '../rag/ragChain.js';
+import { buildRagContext, buildRagPrompt, buildRagSystemPrompt } from '../rag/ragChain.js';
 import { resolveRagNamespace } from '../rag/namespace.js';
 import * as thinkingEngine from '../ai/thinkingEngine.js';
 import { executeReActLoop, getToolDefinitions } from '../ai/toolEngine.js';
@@ -411,7 +411,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
 
   try {
     const ragNamespace = resolveRagNamespace(req);
-    const ragContext = await buildRagContext(message, 3, ragNamespace).catch(() => null);
+    const ragContext = await buildRagContext(message, 4, ragNamespace).catch(() => null);
     const ragMessage = buildRagPrompt(message, ragContext);
 
     const dbUserId = resolveDbUserId(req);
@@ -426,6 +426,8 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
       ...safeContext,
       tools,
       _serverTurns: turns,
+      ragContext: ragContext || '',
+      ragSystemPrompt: buildRagSystemPrompt(ragContext),
     };
     if (dbUserId) {
       enrichedContext.memoryPrefix = await buildMemoryContext(message, dbUserId).catch(() => '');

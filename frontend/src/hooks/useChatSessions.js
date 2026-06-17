@@ -33,6 +33,23 @@ export default function useChatSessions() {
     saveActiveSessionId(id);
   }, []);
 
+  const clearActiveSession = useCallback(() => {
+    setActiveId(null);
+    saveActiveSessionId(null);
+  }, []);
+
+  const updateSessionTitle = useCallback((sessionId, title) => {
+    if (!title?.trim()) return;
+    setSessions((prev) => {
+      const next = prev.map((s) => (
+        s.id === sessionId
+          ? { ...s, title: title.trim(), updatedAt: new Date().toISOString() }
+          : s
+      ));
+      return persist(next);
+    });
+  }, [persist]);
+
   const createSession = useCallback((section = 'chat') => {
     const session = createEmptySession(section);
     setSessions((prev) => persist([session, ...prev]));
@@ -158,7 +175,9 @@ export default function useChatSessions() {
     activeSession,
     createSession,
     selectSession,
+    clearActiveSession,
     deleteSession,
+    updateSessionTitle,
     appendMessage,
     updateLastMessage,
     patchLastAssistant,

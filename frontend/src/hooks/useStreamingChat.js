@@ -3,16 +3,19 @@ import { generateText, queryRag, thinkMessage } from '../api/client.js';
 import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
 import { runHumanThinkPipeline } from '../utils/humanThinkPipeline.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
-import { streamPromptResponse } from '../utils/promptEngine.js';
+import { streamFallbackChat } from '../utils/fallbackChat.js';
+import { streamAnthropicDirect } from '../utils/anthropicDirect.js';
 import { buildChatMessages, resolveHistory } from '../utils/memory.js';
 import ownaiMemory from '../utils/ownaiMemory.js';
 import { detectTask } from '../utils/modelRouter.js';
 import { apiModeFromUiId, shouldUseThinkEndpoint } from '../constants/thinkingModes.js';
+import { getOwnaiSessionId } from '../utils/sessionId.js';
 import {
   detectAIMode,
   AI_MODES,
   canReachBackend,
   friendlyAIError,
+  USER_UNAVAILABLE_MSG,
 } from '../utils/apiConfig.js';
 
 async function consumeStream(tokenStream, onToken) {
@@ -58,8 +61,9 @@ export default function useStreamingChat() {
     algorithm_id,
     useRag = true,
     thinkingModeUi = 'auto',
-    sessionId,
+    sessionId: sessionIdParam,
   }) => {
+    const sessionId = sessionIdParam || getOwnaiSessionId();
     const prompt = message.trim();
     if (!prompt) return { content: '', model: activeModel, mode: activeMode };
 
@@ -72,7 +76,7 @@ export default function useStreamingChat() {
     let ragContext = '';
     if (useRag && await canReachBackend()) {
       try {
-        const rag = await queryRag(prompt);
+        const rag = await queryRag(prompt, 4, sessionId);
         ragContext = rag.context || '';
       } catch {
         // RAG optional
@@ -91,8 +95,10 @@ export default function useStreamingChat() {
       modelLabel = await resolveOllamaModel(task.model);
     } else if (currentAiMode === AI_MODES.BACKEND) {
       modelLabel = model_key || 'QVAC Llama 3.2';
+    } else if (currentAiMode === AI_MODES.CLOUD) {
+      modelLabel = 'claude-sonnet-4-6';
     } else {
-      modelLabel = 'prompt-engine';
+      modelLabel = 'OWNAI';
     }
     setActiveModel(modelLabel);
     setThinking(true);
@@ -119,7 +125,15 @@ export default function useStreamingChat() {
         return persist(content);
       }
 
-      if (await canReachBackend()) {
+      if (currentAiMode === AI_MODES.CLOUD) {
+        const content = await consumeStream(
+          streamAnthropicDirect({ messages: chatMessages, maxTokens: max_tokens }),
+          handleToken,
+        );
+        return persist(content);
+      }
+
+      if (await canReachBackend(3)) {
         const useThink = shouldUseThinkEndpoint(thinkingModeUi, false);
         const apiMode = apiModeFromUiId(thinkingModeUi);
 
@@ -188,11 +202,28 @@ export default function useStreamingChat() {
         });
       }
 
-      const content = await consumeStream(streamPromptResponse(prompt), handleToken);
+      if (ragContext?.trim()) {
+        throw new Error(USER_UNAVAILABLE_MSG);
+      }
+      const content = await consumeStream(
+        streamFallbackChat({ prompt, chatMessages, maxTokens: max_tokens }),
+        handleToken,
+      );
       return persist(content);
     } catch (error) {
+      if (ragContext?.trim()) {
+        throw new Error(USER_UNAVAILABLE_MSG);
+      }
+      const msg = error?.message || '';
+      const canUseOfflineFallback = /backend not connected|unreachable|timed out|failed to fetch|502|503|404|health check|starting up/i.test(msg);
+      if (!canUseOfflineFallback) {
+        throw new Error(friendlyAIError(error));
+      }
       try {
-        const content = await consumeStream(streamPromptResponse(prompt), handleToken);
+        const content = await consumeStream(
+          streamFallbackChat({ prompt, chatMessages, maxTokens: max_tokens }),
+          handleToken,
+        );
         return persist(content);
       } catch {
         throw new Error(friendlyAIError(error));

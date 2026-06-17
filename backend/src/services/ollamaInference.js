@@ -4,7 +4,7 @@ import { detectTask, OLLAMA_MODELS } from '../utils/modelRouter.js';
 import { logger } from '../utils/logger.js';
 
 export const OLLAMA_LIMITED_MODE_MESSAGE =
-  'I am currently running in limited mode. Please install Ollama to enable full AI responses.';
+  'OWNAI is currently starting up. Please try again in a moment.';
 
 function historyToMessages(history = [], prompt = '') {
   const turns = history

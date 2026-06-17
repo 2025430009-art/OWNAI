@@ -13,6 +13,64 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+/** @param {ChatSession} chat */
+export function saveChat(chat) {
+  const all = loadSessions();
+  const idx = all.findIndex((c) => c.id === chat.id);
+  const next = idx >= 0
+    ? all.map((c, i) => (i === idx ? normalizeSession(chat) : c))
+    : [normalizeSession(chat), ...all];
+  saveSessions(next);
+}
+
+/** @returns {ChatSession[]} */
+export function getAllChats() {
+  return loadSessions();
+}
+
+/**
+ * @param {string} firstMessage
+ * @returns {ChatSession}
+ */
+export function createChat(firstMessage = '') {
+  const session = createEmptySession('chat');
+  if (firstMessage.trim()) {
+    session.title = titleFromFirstMessage(firstMessage);
+  }
+  return session;
+}
+
+/** @param {string} id */
+export function deleteChat(id) {
+  const all = loadSessions().filter((c) => c.id !== id);
+  saveSessions(all);
+}
+
+/**
+ * Group chats for sidebar — Today, Yesterday, This Week, Older.
+ * @param {ChatSession[]} chats
+ */
+export function groupChatsByDate(chats) {
+  const now = new Date();
+  const groups = { Today: [], Yesterday: [], 'This Week': [], Older: [] };
+
+  chats
+    .filter((c) => !c.section || c.section === 'chat')
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .forEach((chat) => {
+      const d = new Date(chat.updatedAt);
+      const diffDays = Math.floor((startOfDay(now) - startOfDay(d)) / 86400000);
+      if (diffDays === 0) groups.Today.push(chat);
+      else if (diffDays === 1) groups.Yesterday.push(chat);
+      else if (diffDays < 7) groups['This Week'].push(chat);
+      else groups.Older.push(chat);
+    });
+
+  return Object.fromEntries(
+    Object.entries(groups).filter(([, list]) => list.length > 0),
+  );
+}
+
 export function createSessionId() {
   return crypto.randomUUID();
 }
