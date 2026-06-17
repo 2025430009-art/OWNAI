@@ -15,11 +15,8 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import apiRouter from './routes/index.js';
 import openaiRouter from './routes/openai.js';
 import { initDatabase } from './db/index.js';
-import { initMongo, disconnectMongo } from './db/mongo.js';
-import { modelManager } from './services/modelManager.js';
+import { initMongo } from './db/mongo.js';
 import { resolveListenPort } from '../scripts/ensure-port.js';
-import { attachPromptToVideoWs } from './services/promptToVideo/orchestrator.js';
-import { ensurePromptToVideoDirs } from './services/promptToVideo/videoJobStore.js';
 
 const __dirnameServer = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirnameServer, '../..');
@@ -140,12 +137,11 @@ async function start() {
 
   try {
     await initDatabase();
-    logger.info('Database ready');
   } catch (error) {
     logger.warn('Database unavailable — auth/usage features disabled', { error: error.message });
   }
 
-  await initMongo().catch(() => {});
+  await initMongo();
 
   const listenPort = await resolveListenPort(config.port);
 
@@ -158,6 +154,7 @@ async function start() {
   const server = createServer(app);
 
   const ptvWss = new WebSocketServer({ noServer: true });
+  const { attachPromptToVideoWs } = await import('./services/promptToVideo/orchestrator.js');
   attachPromptToVideoWs(ptvWss);
 
   ptvWss.on('connection', (ws) => {
@@ -189,6 +186,7 @@ async function start() {
     socket.destroy();
   });
 
+  const { ensurePromptToVideoDirs } = await import('./services/promptToVideo/videoJobStore.js');
   await ensurePromptToVideoDirs().catch(() => {});
 
   const host = process.env.HOST || '0.0.0.0';
@@ -196,6 +194,7 @@ async function start() {
     || (config.nodeEnv === 'production' ? `http://0.0.0.0:${listenPort}` : `http://localhost:${listenPort}`);
 
   server.listen(listenPort, host, () => {
+    console.log(`OWN AI API running on http://localhost:${listenPort}`);
     logger.info(`OWN AI API running on ${publicUrl}`);
     if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') {
       logger.info(`Swagger docs at ${publicUrl.replace(/\/$/, '')}/api-docs`);
@@ -209,6 +208,8 @@ async function start() {
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
     server.close(async () => {
+      const { modelManager } = await import('./services/modelManager.js');
+      const { disconnectMongo } = await import('./db/mongo.js');
       await modelManager.unloadAll().catch(() => {});
       await disconnectMongo().catch(() => {});
       process.exit(0);

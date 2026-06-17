@@ -17,6 +17,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
 
 const IS_RENDER = process.env.RENDER === 'true'
   || process.env.RENDER_SERVICE_ID !== undefined;
@@ -38,7 +39,7 @@ export const config = {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
   database: {
-    url: process.env.DATABASE_URL || 'postgresql://ownai:ownai@localhost:5432/ownai',
+    url: process.env.DATABASE_URL?.trim() || null,
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),

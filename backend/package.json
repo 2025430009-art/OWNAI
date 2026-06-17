@@ -4,8 +4,8 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "start": "node --max-old-space-size=512 src/server.js",
+    "dev": "node --max-old-space-size=512 --watch src/server.js",
     "test": "node --test tests/mathSolver.test.js tests/aiResearchSolver.test.js tests/ownaiQa.test.js tests/codeLibrary.test.js tests/safeExpression.test.js tests/conversationHistory.test.js tests/trustedConversation.test.js tests/modelRouter.test.js tests/ragDocumentLoader.test.js tests/ragNamespace.test.js tests/pdfParser.test.js tests/literatureEngine.test.js tests/codeEngine.test.js tests/ragIntegration.test.js tests/simulationEngine.test.js tests/researchChatContext.test.js tests/thinkingEngine.test.js tests/thinkingRoutes.test.js tests/toolEngine.test.js tests/refinementEngine.test.js tests/memoryEngine.test.js",
     "migrate:research": "node src/db/migrations/runResearchMigration.js",
     "migrate:thinking": "node src/db/migrations/runThinkingMigration.js",

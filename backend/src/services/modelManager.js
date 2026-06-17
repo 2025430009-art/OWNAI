@@ -2,21 +2,19 @@ import {
   config,
   ENABLE_QVAC,
 } from '../config/index.js';
-import {
-  loadModel,
-  completion,
-  unloadModel,
-  LLAMA_3_2_1B_INST_Q4_0,
-} from '@qvac/sdk';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 import { isQvacOrRpcError } from './ollamaInference.js';
 
-const BUILTIN_MODELS = {
-  LLAMA_3_2_1B_INST_Q4_0,
-};
-
 let QVAC_DISABLED_THIS_PROCESS = false;
+let qvacSdkPromise = null;
+
+async function loadQvacSdk() {
+  if (!qvacSdkPromise) {
+    qvacSdkPromise = import('@qvac/sdk');
+  }
+  return qvacSdkPromise;
+}
 
 class ModelManager {
   constructor() {
@@ -30,7 +28,7 @@ class ModelManager {
     return ENABLE_QVAC && !QVAC_DISABLED_THIS_PROCESS;
   }
 
-  resolveModelSrc(modelSrc) {
+  resolveModelSrc(modelSrc, BUILTIN_MODELS) {
     if (BUILTIN_MODELS[modelSrc]) {
       return BUILTIN_MODELS[modelSrc];
     }
@@ -56,11 +54,14 @@ class ModelManager {
       return entry.modelId;
     }
 
-    const resolvedSrc = this.resolveModelSrc(modelSrc);
-    console.log('[QVAC] worker lifecycle: loadModel starting', { modelKey, modelSrc: resolvedSrc });
+    console.log('[QVAC] worker lifecycle: loadModel starting', { modelKey });
 
     const startTime = Date.now();
     try {
+      const { loadModel, LLAMA_3_2_1B_INST_Q4_0 } = await loadQvacSdk();
+      const BUILTIN_MODELS = { LLAMA_3_2_1B_INST_Q4_0 };
+      const resolvedSrc = this.resolveModelSrc(modelSrc, BUILTIN_MODELS);
+
       const modelId = await loadModel({
         modelSrc: resolvedSrc,
         modelType: 'llm',
@@ -106,6 +107,7 @@ class ModelManager {
       const modelId = await this.ensureLoaded(modelKey, modelSrc);
       if (!modelId) return null;
 
+      const { completion } = await loadQvacSdk();
       const history = conversationHistory?.length
         ? conversationHistory
         : [{ role: 'user', content: prompt }];
@@ -146,6 +148,7 @@ class ModelManager {
     const modelId = await this.ensureLoaded(modelKey, modelSrc);
     if (!modelId) return null;
 
+    const { completion } = await loadQvacSdk();
     const history = conversationHistory?.length
       ? conversationHistory
       : [{ role: 'user', content: prompt }];
@@ -198,6 +201,7 @@ class ModelManager {
     if (!entry) return false;
 
     logger.info('[QVAC] unloadModel', { modelKey, modelId: entry.modelId });
+    const { unloadModel } = await loadQvacSdk();
     await unloadModel({ modelId: entry.modelId });
     this.cache.delete(modelKey);
     return true;

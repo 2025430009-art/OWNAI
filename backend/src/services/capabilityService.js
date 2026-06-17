@@ -1,25 +1,19 @@
-import {
-  loadModel,
-  completion,
-  embed,
-  ragIngest,
-  ragSearch,
-  finetune,
-  diffusion,
-  video,
-  transcribe,
-  textToSpeech,
-  translate,
-  classify,
-  ocr,
-  LLAMA_3_2_1B_INST_Q4_0,
-} from '@qvac/sdk';
 import fs from 'fs/promises';
 import path from 'path';
-import { config } from '../config/index.js';
+import { config, ENABLE_QVAC } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
-const BUILTIN = { LLAMA_3_2_1B_INST_Q4_0 };
+let qvacSdkPromise = null;
+
+async function getQvac() {
+  if (!ENABLE_QVAC) {
+    throw Object.assign(new Error('QVAC capabilities are disabled in this environment'), { status: 503 });
+  }
+  if (!qvacSdkPromise) {
+    qvacSdkPromise = import('@qvac/sdk');
+  }
+  return qvacSdkPromise;
+}
 
 const MODEL_ENV_KEYS = {
   llm: 'LLM_MODEL_SRC',
@@ -38,7 +32,7 @@ class CapabilityService {
     this.models = new Map();
   }
 
-  resolveSrc(modelSrc) {
+  resolveSrc(modelSrc, BUILTIN) {
     if (!modelSrc) return null;
     if (BUILTIN[modelSrc]) return BUILTIN[modelSrc];
     if (modelSrc.startsWith('http')) return modelSrc;
@@ -48,11 +42,13 @@ class CapabilityService {
     return path.join(config.modelPath, modelSrc);
   }
 
-  getModelSrc(modelType, override) {
-    if (override) return this.resolveSrc(override);
+  async getModelSrc(modelType, override) {
+    const { LLAMA_3_2_1B_INST_Q4_0 } = await getQvac();
+    const BUILTIN = { LLAMA_3_2_1B_INST_Q4_0 };
+    if (override) return this.resolveSrc(override, BUILTIN);
     const envKey = MODEL_ENV_KEYS[modelType];
     const fromEnv = envKey ? process.env[envKey] : null;
-    if (fromEnv) return this.resolveSrc(fromEnv);
+    if (fromEnv) return this.resolveSrc(fromEnv, BUILTIN);
     if (modelType === 'llm') return BUILTIN.LLAMA_3_2_1B_INST_Q4_0;
     return null;
   }
@@ -63,7 +59,7 @@ class CapabilityService {
       return this.models.get(cacheKey);
     }
 
-    const modelSrc = this.getModelSrc(modelType, modelSrcOverride);
+    const modelSrc = await this.getModelSrc(modelType, modelSrcOverride);
     if (!modelSrc) {
       throw Object.assign(
         new Error(`No model configured for type "${modelType}". Set ${MODEL_ENV_KEYS[modelType]} in .env`),
@@ -72,6 +68,7 @@ class CapabilityService {
     }
 
     logger.info('Loading capability model', { modelType, modelSrc });
+    const { loadModel } = await getQvac();
     const modelId = await loadModel({ modelSrc, modelType });
     this.models.set(cacheKey, modelId);
     return modelId;
@@ -79,6 +76,7 @@ class CapabilityService {
 
   async textGeneration({ prompt, max_tokens = 256, temperature = 0.7, model_src }) {
     const modelId = await this.ensureModel('llm', model_src);
+    const { completion } = await getQvac();
     const run = completion({
       modelId,
       history: [{ role: 'user', content: prompt }],
@@ -92,6 +90,7 @@ class CapabilityService {
 
   async textEmbeddings({ text, model_src }) {
     const modelId = await this.ensureModel('embeddings', model_src);
+    const { embed } = await getQvac();
     const inputs = Array.isArray(text) ? text : [text];
     const { embedding } = await embed({ modelId, text: inputs.length === 1 ? inputs[0] : inputs });
     return {
@@ -102,6 +101,7 @@ class CapabilityService {
 
   async rag({ action = 'query', documents, query, workspace = 'default', top_k = 5, model_src }) {
     const modelId = await this.ensureModel('llm', model_src);
+    const { ragIngest, ragSearch, completion } = await getQvac();
 
     if (action === 'ingest') {
       if (!documents?.length) throw Object.assign(new Error('documents array required'), { status: 400 });
@@ -138,7 +138,8 @@ class CapabilityService {
   async fineTuning({ action = 'status', dataset_path, config: ftConfig, model_src }) {
     if (action === 'start') {
       const modelId = await this.ensureModel('llm', model_src);
-      const handle = finetune({
+      const { finetune } = await getQvac();
+      finetune({
         modelId,
         dataset: dataset_path,
         ...ftConfig,
@@ -154,6 +155,7 @@ class CapabilityService {
 
   async multimodal({ prompt, image_path, image_base64, model_src }) {
     const modelId = await this.ensureModel('llm', model_src);
+    const { completion } = await getQvac();
     const content = [{ type: 'text', text: prompt }];
     if (image_path) {
       content.push({ type: 'image', image: image_path });
@@ -172,6 +174,7 @@ class CapabilityService {
 
   async imageGeneration({ prompt, init_image_path, strength, model_src }) {
     const modelId = await this.ensureModel('diffusion', model_src);
+    const { diffusion } = await getQvac();
     const params = { modelId, prompt };
     if (init_image_path) {
       params.init_image = init_image_path;
@@ -190,6 +193,7 @@ class CapabilityService {
 
   async videoGeneration({ prompt, model_src }) {
     const modelId = await this.ensureModel('diffusion', model_src);
+    const { video } = await getQvac();
     const result = video({ modelId, prompt });
     const outputs = await result.outputs;
     return {
@@ -203,6 +207,7 @@ class CapabilityService {
 
   async transcription({ audio_path, audio_base64, model_src }) {
     const modelId = await this.ensureModel('whisper', model_src);
+    const { transcribe } = await getQvac();
     let audio = audio_path;
     if (!audio && audio_base64) {
       const tmpPath = path.join(config.modelPath, `upload-${Date.now()}.wav`);
@@ -216,6 +221,7 @@ class CapabilityService {
 
   async textToSpeechRun({ text, model_src }) {
     const modelId = await this.ensureModel('tts', model_src);
+    const { textToSpeech } = await getQvac();
     const result = textToSpeech({ modelId, text, stream: false });
     const buffer = await result.buffer;
     return {
@@ -247,12 +253,14 @@ class CapabilityService {
 
   async translationRun({ text, from = 'en', to = 'es', model_src }) {
     const modelId = await this.ensureModel('nmt', model_src);
+    const { translate } = await getQvac();
     const result = translate({ modelId, text, from, to, stream: false });
     return { translation: await result.text };
   }
 
   async vla({ prompt, image_path, image_base64, model_src }) {
     const modelId = await this.ensureModel('vla', model_src);
+    const { completion } = await getQvac();
     const image = image_path || (image_base64 ? Buffer.from(image_base64, 'base64') : null);
     if (!image) throw Object.assign(new Error('image_path or image_base64 required'), { status: 400 });
     const run = completion({
@@ -266,6 +274,7 @@ class CapabilityService {
 
   async ocrRun({ image_path, image_base64, model_src }) {
     const modelId = await this.ensureModel('ocr', model_src);
+    const { ocr } = await getQvac();
     const image = image_path || (image_base64 ? Buffer.from(image_base64, 'base64') : null);
     if (!image) throw Object.assign(new Error('image_path or image_base64 required'), { status: 400 });
     const { blocks } = ocr({ modelId, image });
@@ -276,6 +285,7 @@ class CapabilityService {
 
   async imageClassification({ image_path, image_base64, model_src }) {
     const modelId = await this.ensureModel('classification', model_src);
+    const { classify } = await getQvac();
     const image = image_path || (image_base64 ? Buffer.from(image_base64, 'base64') : null);
     if (!image) throw Object.assign(new Error('image_path or image_base64 required'), { status: 400 });
     const results = await classify({ modelId, image });

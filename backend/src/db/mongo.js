@@ -11,19 +11,21 @@ export function isMongoAvailable() {
 export async function initMongo() {
   const uri = config.mongodb?.uri;
   if (!uri) {
-    logger.warn('MONGODB_URI not set — video metadata will use file fallback');
-    return false;
+    console.warn('[DB] MONGODB_URI not set — using file fallback');
+    return null;
   }
 
   try {
     await mongoose.connect(uri);
     connected = true;
+    console.log('[DB] MongoDB connected');
     logger.info('MongoDB connected for PromptToVideo jobs');
     return true;
-  } catch (error) {
-    logger.warn('MongoDB unavailable — video metadata file fallback', { error: error.message });
+  } catch (err) {
+    console.warn('[DB] MongoDB unavailable:', err.message);
+    logger.warn('MongoDB unavailable — video metadata file fallback', { error: err.message });
     connected = false;
-    return false;
+    return null;
   }
 }
 

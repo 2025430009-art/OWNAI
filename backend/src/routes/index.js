@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import { ENABLE_QVAC } from '../config/index.js';
+import { isDatabaseAvailable } from '../db/index.js';
+import { isOllamaAvailable } from '../services/ollamaInference.js';
 import generateRouter from './generate.js';
 import authRouter from './auth.js';
 import modelsRouter from './models.js';
@@ -17,10 +20,14 @@ import promptToVideoRouter from './promptToVideo.js';
 
 const router = Router();
 
-router.get('/health', (_req, res) => {
+router.get('/health', async (_req, res) => {
+  const ollama = await isOllamaAvailable();
   res.json({
     success: true,
-    status: 'healthy',
+    status: 'ok',
+    db: isDatabaseAvailable(),
+    ollama,
+    qvac: ENABLE_QVAC,
     timestamp: new Date().toISOString(),
   });
 });

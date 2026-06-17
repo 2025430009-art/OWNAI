@@ -15,17 +15,28 @@ export function isDatabaseAvailable() {
 }
 
 export function getPool() {
-  if (!pool) {
-    pool = new Pool({ connectionString: config.database.url });
-    pool.on('error', (err) => logger.error('PostgreSQL pool error', { error: err.message }));
+  if (!pool || !dbAvailable) {
+    const err = new Error('Database unavailable');
+    err.code = 'DB_UNAVAILABLE';
+    throw err;
   }
   return pool;
 }
 
 export async function initDatabase() {
-  const client = await getPool().connect();
+  if (!config.database.url) {
+    console.warn('[DB] DATABASE_URL not set — running without database');
+    dbAvailable = false;
+    return null;
+  }
+
   try {
-    await client.query(`
+    pool = new Pool({ connectionString: config.database.url });
+    pool.on('error', (err) => logger.error('PostgreSQL pool error', { error: err.message }));
+
+    const client = await pool.connect();
+    try {
+      await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -79,32 +90,44 @@ export async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_code_library_category ON code_library(category);
     `);
 
-    const research = await runResearchMigration(client);
-    if (research.ok) {
-      logger.info('Research tables ready', { tables: research.tables });
-    } else {
-      logger.warn('Research migration incomplete', { missing: research.missing });
-    }
+      const research = await runResearchMigration(client);
+      if (research.ok) {
+        logger.info('Research tables ready', { tables: research.tables });
+      } else {
+        logger.warn('Research migration incomplete', { missing: research.missing });
+      }
 
-    const thinking = await runThinkingMigration(client);
-    if (thinking.ok) {
-      logger.info('Thinking logs table ready', { tables: thinking.tables });
-    } else {
-      logger.warn('Thinking migration incomplete', { missing: thinking.missing });
-    }
+      const thinking = await runThinkingMigration(client);
+      if (thinking.ok) {
+        logger.info('Thinking logs table ready', { tables: thinking.tables });
+      } else {
+        logger.warn('Thinking migration incomplete', { missing: thinking.missing });
+      }
 
-    const memory = await runMemoryMigration(client);
-    if (memory.ok) {
-      logger.info('Memory tables ready', { tables: memory.tables });
-    } else {
-      logger.warn('Memory migration incomplete', { missing: memory.missing });
-    }
+      const memory = await runMemoryMigration(client);
+      if (memory.ok) {
+        logger.info('Memory tables ready', { tables: memory.tables });
+      } else {
+        logger.warn('Memory migration incomplete', { missing: memory.missing });
+      }
 
-    dbAvailable = true;
-    logger.info('Database initialized');
-  } finally {
-    client.release();
+      dbAvailable = true;
+      console.log('[DB] PostgreSQL connected');
+      logger.info('Database initialized');
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.warn('[DB] PostgreSQL unavailable — auth features disabled:', err.message);
+    if (pool) {
+      await pool.end().catch(() => {});
+      pool = null;
+    }
+    dbAvailable = false;
+    return null;
   }
+
+  return pool;
 }
 
 function isDbError(error) {

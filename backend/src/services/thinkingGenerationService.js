@@ -1,6 +1,6 @@
 import { modelManager } from './modelManager.js';
 import { streamAnthropicMessages, mapHistoryToAnthropicMessages } from './anthropicService.js';
-import { ollamaInfer, streamOllamaInference } from './ollamaInference.js';
+import { ollamaInfer, streamOllamaInference, OLLAMA_LIMITED_MODE_MESSAGE } from './ollamaInference.js';
 import {
   ENABLE_QVAC,
   ENABLE_REASONING,
@@ -251,11 +251,10 @@ export async function runThinkingGeneration({
   }
 
   // Silent last resort — never expose infrastructure errors
-  const greeting = 'Hello! I am OWNAI. How can I help you today?';
-  onEvent?.({ type: 'text_replace', text: greeting });
+  onEvent?.({ type: 'text_replace', text: OLLAMA_LIMITED_MODE_MESSAGE });
   emitConfidence(onEvent, DEFAULT_CONFIDENCE);
   return {
-    text: greeting,
+    text: OLLAMA_LIMITED_MODE_MESSAGE,
     thinking: '',
     mode: THINKING_MODES.DIRECT,
     confidence: DEFAULT_CONFIDENCE,

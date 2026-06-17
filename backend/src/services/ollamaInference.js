@@ -3,6 +3,9 @@ import { streamOllamaChat } from '../utils/ollamaClient.js';
 import { detectTask, OLLAMA_MODELS } from '../utils/modelRouter.js';
 import { logger } from '../utils/logger.js';
 
+export const OLLAMA_LIMITED_MODE_MESSAGE =
+  'I am currently running in limited mode. Please install Ollama to enable full AI responses.';
+
 function historyToMessages(history = [], prompt = '') {
   const turns = history
     .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -23,6 +26,16 @@ function isQvacOrRpcError(error) {
     || msg.includes('bare');
 }
 
+export async function isOllamaAvailable() {
+  try {
+    const baseUrl = OLLAMA_URL.replace(/\/$/, '');
+    const res = await fetch(`${baseUrl}/`, { signal: AbortSignal.timeout(2000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Direct Ollama /api/generate stream — bulletproof fallback when QVAC is unavailable.
  */
@@ -30,49 +43,56 @@ export async function ollamaInfer(prompt, onToken, model = INFERENCE_MODEL) {
   const baseUrl = OLLAMA_URL.replace(/\/$/, '');
   logger.info('[Ollama] inference start', { model });
 
-  const res = await fetch(`${baseUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt, stream: true }),
-  });
+  try {
+    const res = await fetch(`${baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, stream: true }),
+      signal: AbortSignal.timeout(5000),
+    });
 
-  if (!res.ok) {
-    throw new Error(`Ollama ${res.status}`);
-  }
+    if (!res.ok) {
+      throw new Error(`Ollama ${res.status}`);
+    }
 
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buffer = '';
-  let full = '';
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buffer = '';
+    let full = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += dec.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+      buffer += dec.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const json = JSON.parse(line);
-        if (json.response) {
-          full += json.response;
-          onToken?.(json.response);
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const json = JSON.parse(line);
+          if (json.response) {
+            full += json.response;
+            onToken?.(json.response);
+          }
+          if (json.done) {
+            logger.info('[Ollama] inference complete', { chars: full.length });
+            return full;
+          }
+        } catch {
+          // skip malformed stream chunks
         }
-        if (json.done) {
-          logger.info('[Ollama] inference complete', { chars: full.length });
-          return full;
-        }
-      } catch {
-        // skip malformed stream chunks
       }
     }
-  }
 
-  logger.info('[Ollama] inference complete', { chars: full.length });
-  return full;
+    logger.info('[Ollama] inference complete', { chars: full.length });
+    return full;
+  } catch (err) {
+    console.warn('[Ollama] not available:', err.message);
+    onToken?.(OLLAMA_LIMITED_MODE_MESSAGE);
+    return OLLAMA_LIMITED_MODE_MESSAGE;
+  }
 }
 
 /**
@@ -91,18 +111,23 @@ export async function streamOllamaInference({
 
   logger.info('[Ollama] inference start', { model: chosenModel, turns: messages.length });
 
-  let fullText = '';
-  for await (const token of streamOllamaChat({
-    model: chosenModel,
-    messages,
-    temperature,
-  })) {
-    fullText += token;
-    onToken?.(token);
-  }
+  try {
+    let fullText = '';
+    for await (const token of streamOllamaChat({
+      model: chosenModel,
+      messages,
+      temperature,
+    })) {
+      fullText += token;
+      onToken?.(token);
+    }
 
-  logger.info('[Ollama] inference complete', { chars: fullText.length });
-  return fullText;
+    logger.info('[Ollama] inference complete', { chars: fullText.length });
+    return fullText;
+  } catch (err) {
+    console.warn('[Ollama] not available:', err.message);
+    return ollamaInfer(prompt, onToken, chosenModel);
+  }
 }
 
 export { isQvacOrRpcError };
