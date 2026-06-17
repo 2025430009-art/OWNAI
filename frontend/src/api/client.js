@@ -123,6 +123,30 @@ export async function ingestRagDocument(file) {
   return parseJsonResponse(response);
 }
 
+export async function uploadDocument(file) {
+  requireBackend();
+  const form = new FormData();
+  form.append('file', file);
+  const response = await apiFetch('/api/v1/documents/upload', {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    const error = await parseJsonResponse(response).catch(() => ({}));
+    throwApiError(response, error);
+  }
+  return parseJsonResponse(response);
+}
+
+export async function listUploadedDocuments() {
+  const response = await apiFetch('/api/v1/documents');
+  if (!response.ok) {
+    const error = await parseJsonResponse(response).catch(() => ({}));
+    throwApiError(response, error);
+  }
+  return parseJsonResponse(response);
+}
+
 export async function getRagStatus() {
   const response = await apiFetch('/api/v1/rag/status');
   if (!response.ok) {

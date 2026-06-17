@@ -4,9 +4,9 @@ import multer from 'multer';
 import path from 'path';
 import { inferenceAuth } from '../middleware/auth.js';
 import { inferenceRateLimiter } from '../middleware/rateLimiter.js';
-import { ingestFile, queryDocuments, ragStatus } from '../rag/ragChain.js';
+import { ingestFile, queryDocuments, ragStatus, clearRagStore } from '../rag/ragChain.js';
 import { assertRagClearAccess, resolveRagNamespace } from '../rag/namespace.js';
-import { RagQuotaError, vectorStore } from '../rag/vectorStore.js';
+import { RagQuotaError } from '../rag/vectorStore.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -35,7 +35,7 @@ router.post('/ingest', inferenceAuth, inferenceRateLimiter, upload.single('file'
   const namespace = resolveRagNamespace(req);
 
   try {
-    const docCount = await vectorStore.countDocuments(namespace);
+    const docCount = (await ragStatus(namespace)).documentCount;
     if (docCount >= config.rag.maxDocsPerUser) {
       return res.status(429).json({ error: 'RAG quota exceeded' });
     }
@@ -87,7 +87,7 @@ router.post('/query', inferenceAuth, inferenceRateLimiter, async (req, res, next
 
 router.delete('/clear', inferenceAuth, assertRagClearAccess, async (req, res, next) => {
   try {
-    await vectorStore.clear(req.ragNamespace);
+    await clearRagStore(req.ragNamespace);
     res.json({
       success: true,
       message: 'RAG store cleared',

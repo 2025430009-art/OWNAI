@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import MessageBubble from './MessageBubble.jsx';
 import ModelSelector from './ModelSelector.jsx';
 import ThinkingModeSelector from './dashboard/ThinkingModeSelector.jsx';
+import DocumentUpload from './DocumentUpload.jsx';
 import MemoryPanel, { MemoryIndicator } from './dashboard/MemoryPanel.jsx';
 import ThinkingHistoryPanel from './dashboard/ThinkingHistoryPanel.jsx';
 import useStreamingChat from '../hooks/useStreamingChat.js';
@@ -46,6 +47,7 @@ export default function ChatInterface({ models = DEFAULT_MODELS, user }) {
   const [thinkingHistoryOpen, setThinkingHistoryOpen] = useState(false);
   const [memoryCount, setMemoryCount] = useState(null);
   const [chatSessionId] = useState(() => crypto.randomUUID());
+  const [loadedDocument, setLoadedDocument] = useState(null);
   const messagesEndRef = useRef(null);
   const voiceInputRef = useRef(null);
   const voiceOutRef = useRef(new VoiceOutput());
@@ -347,6 +349,12 @@ export default function ChatInterface({ models = DEFAULT_MODELS, user }) {
                 disabled={loading}
                 compact
               />
+              <DocumentUpload onUploaded={(name) => setLoadedDocument(name)} />
+              {loadedDocument && (
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                  Ready to query: {loadedDocument}
+                </span>
+              )}
               {activeCount > 0 && (
                 <span className="text-[11px] text-violet-600 dark:text-violet-400">
                   {activeCount} active research project{activeCount === 1 ? '' : 's'}

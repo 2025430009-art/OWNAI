@@ -1,26 +1,30 @@
-import { loadDocument, chunkText } from './documentLoader.js';
-import { ingestDocument, queryDocuments, vectorStore } from './vectorStore.js';
+import path from 'path';
+import {
+  ingestDocument as engineIngest,
+  queryDocuments as engineQuery,
+  listDocuments,
+  clearDocuments,
+  buildRagPrompt,
+} from './ragEngine.js';
+import { ingestDocument as legacyIngest } from './vectorStore.js';
 import { OWNAI_SYSTEM_PROMPT } from '../config/personality.js';
 import { buildConversationHistory } from '../utils/conversationHistory.js';
+import { vectorStore } from './vectorStore.js';
 
 export async function ingestFile(filePath, originalName, namespace = null) {
-  const { text, filename } = await loadDocument(filePath, originalName);
-  const chunks = chunkText(text, 500);
-  if (!chunks.length) return 0;
-  return ingestDocument(filename, chunks, namespace);
+  const filename = path.basename(originalName || filePath);
+  const result = await engineIngest(filePath, filename, namespace);
+  return result.chunks;
 }
 
 export async function buildRagContext(question, topK = 3, namespace = null) {
-  const context = await queryDocuments(question, topK, namespace);
+  const context = await engineQuery(question, topK, namespace);
   if (!context) return null;
   return context;
 }
 
 export function augmentPromptWithRag(userMessage, ragContext, messages = []) {
-  const enriched = ragContext
-    ? `Context from my documents:\n${ragContext}\n\nQuestion: ${userMessage}`
-    : userMessage;
-
+  const enriched = buildRagPrompt(userMessage, ragContext);
   return buildConversationHistory(messages, enriched);
 }
 
@@ -31,7 +35,34 @@ When document context is provided, prioritize it over general knowledge. Cite th
 }
 
 export async function ragStatus(namespace = null) {
-  return vectorStore.status(namespace);
+  const documents = await listDocuments(namespace);
+  const legacy = await vectorStore.status(namespace).catch(() => ({
+    chunkCount: 0,
+    documentCount: 0,
+    sources: [],
+  }));
+
+  const sources = [...new Set([...documents, ...legacy.sources])];
+  return {
+    namespace: namespace == null || namespace === '' ? 'global' : String(namespace),
+    chunkCount: legacy.chunkCount,
+    documentCount: sources.length,
+    sources,
+    documents,
+  };
 }
 
-export { queryDocuments, ingestDocument };
+export async function clearRagStore(namespace = null) {
+  await clearDocuments(namespace);
+  await vectorStore.clear(namespace);
+}
+
+export async function queryDocuments(question, topK = 3, namespace = null) {
+  return engineQuery(question, topK, namespace);
+}
+
+export async function ingestDocument(filename, texts, namespace = null) {
+  return legacyIngest(filename, texts, namespace);
+}
+
+export { listDocuments, buildRagPrompt };

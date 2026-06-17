@@ -25,6 +25,8 @@ import {
 } from '../services/thinkingLogService.js';
 import { logUsage } from '../db/index.js';
 import { logger } from '../utils/logger.js';
+import { buildRagContext, buildRagPrompt } from '../rag/ragChain.js';
+import { resolveRagNamespace } from '../rag/namespace.js';
 import * as thinkingEngine from '../ai/thinkingEngine.js';
 import { executeReActLoop, getToolDefinitions } from '../ai/toolEngine.js';
 import {
@@ -408,6 +410,10 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
   const startTime = Date.now();
 
   try {
+    const ragNamespace = resolveRagNamespace(req);
+    const ragContext = await buildRagContext(message, 3, ragNamespace).catch(() => null);
+    const ragMessage = buildRagPrompt(message, ragContext);
+
     const dbUserId = resolveDbUserId(req);
     const { turns, sessionKey, safeContext } = resolveTrustedTurns({
       userId: dbUserId,
@@ -424,8 +430,8 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
     if (dbUserId) {
       enrichedContext.memoryPrefix = await buildMemoryContext(message, dbUserId).catch(() => '');
     }
-    const { mode: resolvedMode, detectedMode, meta } = resolveMode(message, mode, enrichedContext);
-    const builtPrompt = buildPromptForMode(resolvedMode, message, enrichedContext, tools);
+    const { mode: resolvedMode, detectedMode, meta } = resolveMode(ragMessage, mode, enrichedContext);
+    const builtPrompt = buildPromptForMode(resolvedMode, ragMessage, enrichedContext, tools);
     const reasoningSystem = buildReasoningSystemPrompt(resolvedMode);
 
     if (stream) {
@@ -458,7 +464,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
         });
       } else if (resolvedMode === THINKING_MODES.REACT) {
         result = await runReActThinking({
-          message,
+          message: ragMessage,
           context: enrichedContext,
           tools,
           stream: true,
@@ -477,7 +483,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
         });
       } else if (resolvedMode === THINKING_MODES.SELF_REFINE) {
         result = await runSelfRefineThinking({
-          message,
+          message: ragMessage,
           context: enrichedContext,
           stream: true,
           scoreConfidence: Boolean(safeContext.score_confidence),
@@ -497,11 +503,11 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
       } else if (resolvedMode === THINKING_MODES.HUMAN_THINK) {
         const humanContext = {
           ...enrichedContext,
-          history: buildHistoryFromContext(enrichedContext, message),
+          history: buildHistoryFromContext(enrichedContext, ragMessage),
           score_confidence: Boolean(safeContext.score_confidence),
         };
         result = await runHumanThinkPipeline({
-          message,
+          message: ragMessage,
           context: humanContext,
           stream: true,
           onEvent: (event) => writeThinkingSseEvent(res, event),
@@ -519,7 +525,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
         });
       } else {
         result = await runStandardThinking({
-          message,
+          message: ragMessage,
           mode: resolvedMode,
           context: enrichedContext,
           tools,
@@ -579,7 +585,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
       });
     } else if (resolvedMode === THINKING_MODES.REACT) {
       result = await runReActThinking({
-        message,
+        message: ragMessage,
         context: enrichedContext,
         tools,
         stream: false,
@@ -587,7 +593,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
       });
     } else if (resolvedMode === THINKING_MODES.SELF_REFINE) {
       result = await runSelfRefineThinking({
-        message,
+        message: ragMessage,
         context: enrichedContext,
         stream: false,
         scoreConfidence: Boolean(safeContext.score_confidence),
@@ -595,17 +601,17 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
     } else if (resolvedMode === THINKING_MODES.HUMAN_THINK) {
       const humanContext = {
         ...enrichedContext,
-        history: buildHistoryFromContext(enrichedContext, message),
+        history: buildHistoryFromContext(enrichedContext, ragMessage),
         score_confidence: Boolean(safeContext.score_confidence),
       };
       result = await runHumanThinkPipeline({
-        message,
+        message: ragMessage,
         context: humanContext,
         stream: false,
       });
     } else {
       result = await runStandardThinking({
-        message,
+        message: ragMessage,
         mode: resolvedMode,
         context: enrichedContext,
         tools,

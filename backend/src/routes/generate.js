@@ -50,8 +50,9 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(generateSchema), 
     }
 
     let conversationHistory;
-    if (use_rag) {
-      const ragNamespace = resolveRagNamespace(req);
+    const ragNamespace = resolveRagNamespace(req);
+    const shouldUseRag = use_rag !== false;
+    if (shouldUseRag) {
       const ragContext = await buildRagContext(finalPrompt, 3, ragNamespace).catch(() => null);
       conversationHistory = augmentPromptWithRag(finalPrompt, ragContext, messages || []);
     } else {
