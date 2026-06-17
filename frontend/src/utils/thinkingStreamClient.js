@@ -117,6 +117,7 @@ export async function consumeThinkingSse(response, handlers = {}) {
             thinking_mode: event.mode || parsed.thinking_mode || meta.reasoning_mode,
             final_answer: event.final_answer || parsed.final_answer || text,
             confidence_overall: event.confidence ?? parsed.confidence_overall,
+            pipeline_meta: event.pipeline_meta || parsed.pipeline_meta,
           });
           if (event.confidence != null) {
             confidence = {
@@ -133,6 +134,13 @@ export async function consumeThinkingSse(response, handlers = {}) {
           handlers.onThinkingResult?.(thinkingResult);
           break;
         }
+        case 'error':
+          handlers.onError?.({
+            code: event.code || 'unknown',
+            message: event.message || 'Reasoning failed',
+            detail: event.detail || null,
+          });
+          break;
         default:
           break;
       }

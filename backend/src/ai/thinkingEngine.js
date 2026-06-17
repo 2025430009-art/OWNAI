@@ -756,11 +756,71 @@ export function modeShowsScratchpad(mode) {
   return mode !== THINKING_MODES.DIRECT;
 }
 
-export function buildFallbackResponse(error) {
+const GENERIC_FALLBACK_TEXT = 'I encountered an issue while reasoning through your request. Please rephrase your question or try again in a moment.';
+
+export function isGenericFallbackText(text) {
+  const normalized = String(text || '').trim();
+  return !normalized || normalized === GENERIC_FALLBACK_TEXT;
+}
+
+/**
+ * @param {Error|{ code?: string, message?: string }} error
+ * @returns {{ code: string, message: string }}
+ */
+export function classifyThinkingFailure(error) {
+  const code = error?.code || inferFailureCode(error?.message);
   return {
-    text: 'I encountered an issue while reasoning through your request. Please rephrase your question or try again in a moment.',
-    thinking: `Fallback activated due to: ${error?.message || 'unknown error'}`,
-    confidence: { score: 20, reasoning: 'Fallback response — model call failed.' },
+    code,
+    message: error?.message || 'Reasoning failed for an unknown reason',
+  };
+}
+
+function inferFailureCode(message = '') {
+  const msg = String(message).toLowerCase();
+  if (msg.includes('timed out') || msg.includes('timeout')) return 'timeout';
+  if (msg.includes('parse') || msg.includes('json')) return 'parse_error';
+  if (msg.includes('confidence')) return 'low_confidence';
+  if (msg.includes('anthropic') || msg.includes('api key')) return 'provider_error';
+  if (msg.includes('network') || msg.includes('fetch')) return 'network_error';
+  return 'model_error';
+}
+
+/**
+ * @param {{ code?: string, message?: string }} failure
+ * @returns {string}
+ */
+export function buildFailureMessage(failure) {
+  const code = failure?.code || 'unknown';
+  const detail = failure?.message ? ` (${failure.message})` : '';
+
+  switch (code) {
+    case 'timeout':
+      return `Reasoning timed out — switched to a faster answer path${detail}.`;
+    case 'low_confidence':
+      return `Low confidence result — simplified the reasoning chain and retried${detail}.`;
+    case 'parse_error':
+      return `Could not parse the model response — retried with a simpler format${detail}.`;
+    case 'provider_error':
+      return `AI provider is unavailable right now${detail}. Check API keys on the backend.`;
+    case 'network_error':
+      return `Network error while contacting the reasoning service${detail}.`;
+    case 'model_error':
+      return `The model failed to complete reasoning${detail}.`;
+    default:
+      return `Reasoning failed${detail}. Please try again in a moment.`;
+  }
+}
+
+export function buildFallbackResponse(error) {
+  const failure = classifyThinkingFailure(error);
+  return {
+    text: buildFailureMessage(failure),
+    thinking: `Fallback activated: ${failure.code} — ${failure.message}`,
+    confidence: {
+      score: 20,
+      reasoning: buildFailureMessage(failure),
+    },
+    failure,
   };
 }
 

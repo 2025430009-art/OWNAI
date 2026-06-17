@@ -11,6 +11,7 @@ import {
   runThinkingGeneration,
   writeThinkingSseEvent,
 } from '../services/thinkingGenerationService.js';
+import { runHumanThinkPipeline } from '../services/humanThinkPipeline.js';
 import {
   isAnthropicAvailable,
   callAnthropicMessages,
@@ -474,7 +475,7 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
           parsed: result.parsed,
           tools_used: result.parsed?.tools_used,
         });
-      } else if (resolvedMode === THINKING_MODES.SELF_REFINE || resolvedMode === THINKING_MODES.HUMAN_THINK) {
+      } else if (resolvedMode === THINKING_MODES.SELF_REFINE) {
         result = await runSelfRefineThinking({
           message,
           context: enrichedContext,
@@ -492,6 +493,29 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
           parsed: result.parsed,
           score_progression: result.parsed?.score_progression,
           confidence_detail: result.confidence_detail,
+        });
+      } else if (resolvedMode === THINKING_MODES.HUMAN_THINK) {
+        const humanContext = {
+          ...enrichedContext,
+          history: buildHistoryFromContext(enrichedContext, message),
+          score_confidence: Boolean(safeContext.score_confidence),
+        };
+        result = await runHumanThinkPipeline({
+          message,
+          context: humanContext,
+          stream: true,
+          onEvent: (event) => writeThinkingSseEvent(res, event),
+        });
+
+        writeThinkingSseEvent(res, {
+          type: 'result',
+          mode: result.mode_used || resolvedMode,
+          confidence: result.confidence,
+          final_answer: result.final_answer,
+          thinking_scratchpad: result.thinking_scratchpad,
+          parsed: result.parsed,
+          confidence_detail: result.confidence_detail,
+          pipeline_meta: result.pipeline_meta,
         });
       } else {
         result = await runStandardThinking({
@@ -561,12 +585,23 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
         stream: false,
         userId: resolveDbUserId(req),
       });
-    } else if (resolvedMode === THINKING_MODES.SELF_REFINE || resolvedMode === THINKING_MODES.HUMAN_THINK) {
+    } else if (resolvedMode === THINKING_MODES.SELF_REFINE) {
       result = await runSelfRefineThinking({
         message,
         context: enrichedContext,
         stream: false,
         scoreConfidence: Boolean(safeContext.score_confidence),
+      });
+    } else if (resolvedMode === THINKING_MODES.HUMAN_THINK) {
+      const humanContext = {
+        ...enrichedContext,
+        history: buildHistoryFromContext(enrichedContext, message),
+        score_confidence: Boolean(safeContext.score_confidence),
+      };
+      result = await runHumanThinkPipeline({
+        message,
+        context: humanContext,
+        stream: false,
       });
     } else {
       result = await runStandardThinking({
@@ -618,12 +653,14 @@ router.post('/', inferenceAuth, inferenceRateLimiter, validate(thinkSchema), asy
 
     return res.json({
       success: true,
-      mode: resolvedMode,
+      mode: result.mode_used || resolvedMode,
       detected_mode: detectedMode,
       confidence: result.confidence,
       final_answer: result.final_answer,
       thinking: result.thinking_scratchpad,
       structured: result.parsed,
+      confidence_detail: result.confidence_detail || null,
+      pipeline_meta: result.pipeline_meta || null,
       log_id: saved?.id || null,
       duration_ms: Date.now() - startTime,
     });

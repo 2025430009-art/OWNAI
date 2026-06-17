@@ -1,6 +1,5 @@
 import {
   LogoMark,
-  PlusIcon,
   ChatIcon,
   FolderIcon,
   ShapesIcon,
@@ -11,13 +10,13 @@ import {
   LibraryIcon,
   SearchIcon,
   PanelIcon,
-  MoreIcon,
   BeakerIcon,
   VideoIcon,
 } from './DashboardIcons.jsx';
 import { MemoryIndicator } from './MemoryPanel.jsx';
 import { ThinkingHistorySidebar } from './ThinkingHistoryPanel.jsx';
 import BackendConnectPanel from './BackendConnectPanel.jsx';
+import ChatHistorySidebar from './ChatHistorySidebar.jsx';
 
 const NAV_MAIN = [
   { id: 'chats', label: 'Chats', icon: ChatIcon },
@@ -129,20 +128,29 @@ export default function DashboardSidebar({
         )}
       </div>
 
-      <div className="px-2 pb-2">
-        <button
-          type="button"
-          onClick={onNewChat}
-          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-stone-100 dark:text-slate-200 dark:hover:bg-slate-800 ${
-            collapsed ? 'justify-center px-0' : ''
-          }`}
-        >
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-            <PlusIcon />
-          </span>
-          {!collapsed && <span>New chat</span>}
-        </button>
-      </div>
+      {!collapsed ? (
+        <div className="flex min-h-0 flex-1 flex-col border-b border-stone-200 dark:border-slate-800">
+          <ChatHistorySidebar
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onNewChat={onNewChat}
+            onSelectSession={(id) => {
+              onSelectSession(id);
+              onSectionChange('chat');
+            }}
+            onDeleteSession={onDeleteSession}
+          />
+        </div>
+      ) : (
+        <ChatHistorySidebar
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onNewChat={onNewChat}
+          onSelectSession={onSelectSession}
+          onDeleteSession={onDeleteSession}
+          collapsed
+        />
+      )}
 
       {!collapsed && (
         <BackendConnectPanel
@@ -206,46 +214,6 @@ export default function DashboardSidebar({
               />
             ))}
           </div>
-        </div>
-      )}
-
-      {!collapsed && (
-        <div className="mt-5 min-h-0 flex-1 overflow-y-auto px-2">
-          <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Recents
-          </p>
-          {sessions.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-slate-400">No conversations yet</p>
-          ) : (
-            <ul className="space-y-0.5">
-              {sessions.slice(0, 20).map((session) => (
-                <li key={session.id} className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectSession(session.id);
-                      onSectionChange('chat');
-                    }}
-                    className={`flex w-full items-center rounded-lg px-3 py-2 pr-8 text-left text-sm transition-colors ${
-                      activeSessionId === session.id && activeSection === 'chat'
-                        ? 'bg-stone-200/70 text-slate-900 dark:bg-slate-800 dark:text-white'
-                        : 'text-slate-600 hover:bg-stone-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <span className="truncate">{session.title}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteSession(session.id)}
-                    className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-stone-200 hover:text-slate-600 group-hover:block dark:hover:bg-slate-700"
-                    aria-label={`Delete ${session.title}`}
-                  >
-                    <MoreIcon />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
 

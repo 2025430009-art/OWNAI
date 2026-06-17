@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { generateText, queryRag, thinkMessage } from '../api/client.js';
 import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
+import { runHumanThinkPipeline } from '../utils/humanThinkPipeline.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
 import { streamPromptResponse } from '../utils/promptEngine.js';
 import { buildChatMessages, resolveHistory } from '../utils/memory.js';
@@ -121,6 +122,29 @@ export default function useStreamingChat() {
       if (await canReachBackend()) {
         const useThink = shouldUseThinkEndpoint(thinkingModeUi, false);
         const apiMode = apiModeFromUiId(thinkingModeUi);
+
+        if (useThink && apiMode === 'human_think') {
+          const humanResult = await runHumanThinkPipeline({
+            message: prompt,
+            context: { score_confidence: true, working_memory: resolvedHistory },
+            onToken: handleToken,
+            onThinking: (thinking) => onThinking?.(thinking),
+            onConfidence: (conf) => onConfidence?.(conf),
+            onMeta: (meta) => onMeta?.(meta),
+            onThinkingResult: (tr) => onThinkingResult?.(tr),
+          });
+          return persist(humanResult.final_answer || '', {
+            thinking: humanResult.thinking,
+            confidence: humanResult.confidence,
+            confidenceDetail: humanResult.confidenceDetail,
+            thinkingResult: humanResult.thinkingResult,
+            reasoningMode: humanResult.mode_used || 'human_think',
+            modeReason: humanResult.pipeline_meta?.silent_fallback
+              ? 'Human Think fell back to direct mode'
+              : 'Mode explicitly set in request',
+            autoDetected: false,
+          });
+        }
 
         const backendResponse = useThink
           ? await thinkMessage({

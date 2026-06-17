@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { thinkMessage } from '../../api/client.js';
+import { runHumanThinkPipeline } from '../../utils/humanThinkPipeline.js';
 
 const MAX_MEMORY = 5;
 
@@ -243,6 +243,7 @@ export default function HumanThinkPanel() {
     setLoading(true);
 
     const { confidence, reply: s1Reply } = system1Match(trimmed);
+    const assistantIndex = newMessages.length;
 
     try {
       if (s1Reply) {
@@ -258,43 +259,114 @@ export default function HumanThinkPanel() {
         return;
       }
 
-      const result = await thinkMessage({
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: '',
+          confidence,
+          process: 'System 2 - deliberate reasoning engaged',
+          streaming: true,
+        },
+      ]);
+
+      const result = await runHumanThinkPipeline({
         message: trimmed,
-        mode: 'human_think',
-        stream: false,
         context: {
           score_confidence: true,
           working_memory: buildContext(newMessages),
         },
-        use_extended_thinking: confidence < 70,
+        onToken: (full) => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const msg = next[assistantIndex];
+            if (!msg || msg.role !== 'assistant') return prev;
+            next[assistantIndex] = { ...msg, content: full, streaming: true };
+            return next;
+          });
+        },
+        onThinking: (thinking) => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const msg = next[assistantIndex];
+            if (!msg || msg.role !== 'assistant') return prev;
+            next[assistantIndex] = { ...msg, thinking };
+            return next;
+          });
+        },
+        onConfidence: (conf) => {
+          if (conf?.score == null) return;
+          setMessages((prev) => {
+            const next = [...prev];
+            const msg = next[assistantIndex];
+            if (!msg || msg.role !== 'assistant') return prev;
+            next[assistantIndex] = {
+              ...msg,
+              confidence: Math.max(confidence, conf.score),
+            };
+            return next;
+          });
+        },
+        onStatus: (status) => {
+          if (status.type === 'retry') {
+            setError(`Retrying (${status.attempt}/3): ${status.message || status.code}`);
+          } else if (status.type === 'fallback') {
+            setError('');
+          } else if (status.type === 'cache_hit') {
+            setError('');
+          }
+        },
       });
 
-      const processLabel = confidence >= 90
-        ? 'System 1 - pattern matched instantly'
-        : confidence >= 70
-          ? 'System 1 -> System 2 - validated instinct'
-          : 'System 2 - deliberate reasoning engaged';
+      const processLabel = result.pipeline_meta?.silent_fallback
+        ? 'System 2 -> Direct fallback (still answered)'
+        : result.pipeline_meta?.cache_hit
+          ? 'System 1 cache - instant recall'
+          : confidence >= 90
+            ? 'System 1 - pattern matched instantly'
+            : confidence >= 70
+              ? 'System 1 -> System 2 - validated instinct'
+              : 'System 2 - deliberate reasoning engaged';
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
+      setMessages((prev) => {
+        const next = [...prev];
+        const msg = next[assistantIndex];
+        if (!msg || msg.role !== 'assistant') return prev;
+        next[assistantIndex] = {
+          ...msg,
           content: result.final_answer || 'No response received.',
-          confidence: Math.max(confidence, result.confidence || 72),
+          confidence: Math.max(confidence, result.confidence?.score || 72),
           process: processLabel,
-        },
-      ]);
+          streaming: false,
+        };
+        return next;
+      });
+      setError('');
     } catch (e) {
       setError(e.message || 'Network error');
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'Could not run Human Think right now. Check backend/API settings.',
-          confidence: 0,
-          process: 'System 2 - error handling',
-        },
-      ]);
+      setMessages((prev) => {
+        const next = [...prev];
+        const msg = next[assistantIndex];
+        if (msg?.role === 'assistant' && msg.streaming) {
+          next[assistantIndex] = {
+            role: 'assistant',
+            content: e.message || 'Could not run Human Think right now.',
+            confidence: 0,
+            process: 'System 2 - error handling',
+            streaming: false,
+          };
+          return next;
+        }
+        return [
+          ...prev,
+          {
+            role: 'assistant',
+            content: e.message || 'Could not run Human Think right now.',
+            confidence: 0,
+            process: 'System 2 - error handling',
+          },
+        ];
+      });
     } finally {
       setLoading(false);
     }

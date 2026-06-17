@@ -45,7 +45,8 @@ const thinkingModeValues = [
 
 const thinkContextSchema = z.object({
   score_confidence: z.boolean().optional(),
-}).strict().optional().default({});
+  working_memory: z.array(messageSchema).max(10).optional(),
+}).passthrough().optional().default({});
 
 export const thinkSchema = z.object({
   message: z.string().min(1, 'message is required').max(10000),
