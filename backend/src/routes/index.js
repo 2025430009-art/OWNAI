@@ -18,6 +18,7 @@ import researchRouter from './research.js';
 import thinkingRouter from './thinking.js';
 import promptToVideoRouter from './promptToVideo.js';
 import documentsRouter from './documents.js';
+import chatCommandRouter from './chatCommand.js';
 
 const router = Router();
 
@@ -28,6 +29,8 @@ router.get('/', (_req, res) => {
     health: '/api/v1/health',
     generate: { method: 'POST', path: '/api/v1/generate' },
     chat: { method: 'POST', path: '/api/v1/chat', note: 'Alias for /generate' },
+    chatCommand: { method: 'POST', path: '/api/v1/chat-bridge/command' },
+    chatReceive: { method: 'GET', path: '/api/v1/chat-bridge/receive/:correlationId' },
     think: { method: 'POST', path: '/api/v1/think' },
     documents: { method: 'POST', path: '/api/v1/documents/upload' },
     rag: { method: 'POST', path: '/api/v1/rag/query' },
@@ -49,6 +52,7 @@ router.get('/health', async (_req, res) => {
 
 router.use('/generate', generateRouter);
 router.use('/chat', generateRouter);
+router.use('/chat-bridge', chatCommandRouter);
 router.use('/auth', authRouter);
 router.use('/models', modelsRouter);
 router.use('/capabilities', capabilitiesRouter);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { generateText, chatWithAttachments, queryRag, thinkMessage } from '../api/client.js';
+import { chatWithAttachments, queryRag, thinkMessage } from '../api/client.js';
+import { chatSendMessage, chatRecvMsgWait } from '../bridge/chatBridge.js';
 import { consumeThinkingSse } from '../utils/thinkingStreamClient.js';
 import { runHumanThinkPipeline } from '../utils/humanThinkPipeline.js';
 import { streamOllamaChat, resolveOllamaModel } from '../utils/ollamaClient.js';
@@ -191,7 +192,7 @@ export default function useAI() {
                 stream: true,
                 use_extended_thinking: apiMode === 'extended',
               })
-            : await generateText({
+            : await chatSendMessage({
                 prompt,
                 messages: resolvedHistory,
                 max_tokens,
@@ -202,16 +203,16 @@ export default function useAI() {
                 use_rag: useRag,
                 enable_thinking: true,
                 reasoning_mode: 'direct',
-              });
+                sessionId,
+              }, { sessionId });
 
-        const streamed = await streamFromBackendSse(
-          response,
-          onToken,
-          onThinking,
-          onConfidence,
-          onMeta,
-          onThinkingResult,
-        );
+        const streamed = await chatRecvMsgWait(response, {
+          onText: (full) => onToken?.(full),
+          onThinking: (thinking) => onThinking?.(thinking),
+          onConfidence: (conf) => onConfidence?.(conf),
+          onMeta: (meta) => onMeta?.(meta),
+          onThinkingResult: (tr) => onThinkingResult?.(tr),
+        });
         return persistMemory(streamed.text || '', {
           thinking: streamed.thinking,
           confidence: streamed.confidence,
